@@ -1,0 +1,6 @@
+"""
+Cycle strength
+"""
+
+def cycle():
+    ...
