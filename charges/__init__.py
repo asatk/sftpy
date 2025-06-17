@@ -1,5 +1,5 @@
-from .charges import charges
+from .charges import random_walk
 
 __all__ = [
-    "charges"
+    "random_walk"
 ]

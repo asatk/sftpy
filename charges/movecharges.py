@@ -51,8 +51,6 @@ def move_charges(phi: np.ndarray,
     
     # TODO IDL -- compare hist2d and sumarr stuff
     # map of absolute fluxes
-    hist_aflux, _, _ = np.hist2d(phi, theta, bins=bintheta,
-                                 weights=np.fabs(flux))
 
     # longitudinally summed absolute fluxes
     if savelat:
@@ -80,7 +78,7 @@ def move_charges(phi: np.ndarray,
     # dilate to add an extra ring of pixels to plage
     #synoptic = cv.dilate(synoptic_smooth[synoptic_smooth > 5.9/9],
     #    np.ones((3,3), dtype=np.int64)))
-    synoptic_dil = cv.dilate(synoptic_sm > 5.9/9, -1,
+    synoptic_dil = cv.dilate(np.asarray(synoptic_sm > 5.9/9, dtype=np.int64), -1,
                              np.ones((3,3), dtype=np.float64))
 
     # if required step size adjusted using ratio of diffusion coefficients
@@ -106,7 +104,7 @@ def move_charges(phi: np.ndarray,
     # to the sphere at the pole, neglecting curvature
 
     # random direction to step in
-    rphi = rng.uniform(nflux) * 2 * np.pi
+    rphi = rng.uniform(high=2*np.pi, size=nflux)
     cosrphi = np.cos(rphi)
     sinrphi = np.sin(rphi)
     
