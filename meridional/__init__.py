@@ -1,5 +1,15 @@
-from .meridional import meridional
+from .merid import merid_1
+from .merid import merid_2
+from .merid import merid_3
+from .merid import merid_4
+
+merid_modes = [
+        merid_1,
+        merid_2,
+        merid_3,
+        merid_4
+]
 
 __all__ = [
-    "meridional"
+    "merid_modes"
 ]

@@ -3,6 +3,7 @@ Model driver
 """
 
 import numpy as np
+from typing import Callable
 
 
 from .charges import charges
@@ -11,8 +12,10 @@ from .cycle import cycle
 from .differential import differential
 from .emergence import add_sources
 from .fielddecay import fielddecay
-from .meridional import meridional
+from .meridional import merid_modes
 
+merid: Callable
+diffr: Callable
 
 def init_sim() -> dict:
 
@@ -31,6 +34,8 @@ def init_sim() -> dict:
     flux[1] = -3 * inv_pol
 
     rng = np.random.default_rng(seed=seed)
+
+
 
     params = dict(
         dt=1,
@@ -69,14 +74,14 @@ def loop(theta, phi, flux, params):
                      mode=params.mode_d, thr=params.thr)
 
         # merid dt/2 step 1
-        meridional(theta, nflux, dt/2, params.merid, mode=params.mode_m)
+        merid(theta, nflux, dt/2, params.merid)
 
         # diffr dt/2 midpoint
         differential(phi, theta, flux, nflux, dt/2, params.diffr,
                      mode=params.mode_d, thr=params.thr)
 
         # meriod dt/2 step 2
-        meridional(theta, nflux, dt/2, params.merid, mode=params.mode_m)
+        merid(theta, nflux, dt/2, params.merid)
 
         # diffr dt/4 endpoint
         differential(phi, theta, flux, nflux, dt/4, params.diffr,
