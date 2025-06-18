@@ -1,6 +1,0 @@
-"""
-Cycle strength
-"""
-
-def cycle():
-    ...

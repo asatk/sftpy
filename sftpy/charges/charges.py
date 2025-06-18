@@ -1,6 +1,7 @@
+import cv2 as cv
 import numpy as np
 
-from .constants import binflux
+from ..constants import binflux
 
 thr = 40.0          # threshold in gauss for map of abs flux density
                     # flux density contour for plage perimeter
@@ -15,7 +16,8 @@ def random_walk(phi: np.ndarray,
                 rng,
                 synoptic: np.ndarray,
                 source: float=1.0,
-                difftest: np.ndarray=None
+                difftest: np.ndarray=None,
+                dependence: int=0
                 ):
 
     step = np.ones(nflux, dtype=np.float64)
@@ -40,8 +42,8 @@ def random_walk(phi: np.ndarray,
     # dilate to add an extra ring of pixels to plage
     #synoptic = cv.dilate(synoptic_smooth[synoptic_smooth > 5.9/9],
     #    np.ones((3,3), dtype=np.int64)))
-    synoptic_dil = cv.dilate(np.asarray(synoptic_sm > 5.9/9, dtype=np.int64), -1,
-                             np.ones((3,3)))
+    synoptic_thr2 = np.asarray(synoptic_sm > 5.9 / 9, dtype=np.uint8)
+    synoptic_dil = cv.dilate(synoptic_thr2, np.ones((3,3), dtype=np.uint8))
 
     # if required step size adjusted using ratio of diffusion coefficients
     # from Schrijver&Martin 90; not done in conjunction w/ flux-dens dep

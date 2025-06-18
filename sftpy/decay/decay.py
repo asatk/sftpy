@@ -4,13 +4,13 @@ Decay field
 
 import numpy as np
 
-def field_decay(theta,
-                phi,
-                flux: np.ndarray,
-                rng,
-                nflux: int,
-                dt: float,
-                decay_t: float):
+def decay(phi: np.ndarray,
+          theta: np.ndarray,
+          flux: np.ndarray,
+          nflux: int,
+          dt: float,
+          rng,
+          decay_t: float):
 
     # no decay if decay timescale is too large
     if decay_t > 999:
@@ -22,7 +22,7 @@ def field_decay(theta,
 
     # fractional amt rounded up w/ random prob equal to fraction
     remainder = remove - np.int64(remove)
-    if rng.uniform() < rest:
+    if rng.uniform() < remainder:
         remove += 1
 
     # integer number of flux concentrations to remove
