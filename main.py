@@ -2,8 +2,11 @@
 Model driver
 """
 
+from matplotlib import pyplot as plt
 import numpy as np
 from typing import Callable
+
+from plot import plot_syn, plot_lat, plot_hist
 
 from sftpy.charges import random_walk
 from sftpy.cycle import cycle_modes
@@ -39,8 +42,8 @@ def init_sim() -> dict:
     global params, phi, theta, flux, nflux, rng, cycle, diffr, merid
 
     params = Params(
-        dt=1,
-        nstep=1000,
+        dt=21600,   # 6 hrs
+        nstep=400000,
         seed=0x2025,
         nflux=2,
         nfluxmax=1000000,
@@ -72,6 +75,8 @@ def init_sim() -> dict:
     flux[1] = -3 * params.inv_pol
 
     nflux = 2
+    
+    plot_syn(phi, theta, flux, nflux)
 
     # activity cycle strength mode
     mode_c = 1
@@ -130,19 +135,27 @@ def loop():
         
         # calculate synoptic map
         synoptic, _, _ = np.histogram2d(
-                phi, theta, bins=(params.phibins, params.thetabins),
-                weights=np.fabs(flux))
+                phi, theta, weights=np.fabs(flux),
+                bins=(params.phibins, params.thetabins),
+                range=((0, 2*np.pi), (0, np.pi)))
+
+        plot_hist(synoptic)
+
         if params.savelat:
             hist_flux, _, _ = np.histogram2d(
-                    phi, theta, bins=(params.phibins, params.thetabins),
-                    weights=flux)
-            np.save(hist_aflux, "aflux.npy")
-            np.save(hist_flux, "flux.npy")
+                    phi, theta, weights=flux,
+                    bins=(params.phibins, params.thetabins),
+                    range=((0, 2*np.pi), (0, np.pi)))
+            lat_aflux = np.sum(hist_aflux, axis=0)
+            lat_flux = np.sum(hist_flux, axis=0)
+            np.save(lat_aflux, "lat_aflux.npy")
+            np.save(lat_flux, "lat_flux.npy")
 
         # moves charges in random walk step size according to diffusion coeff
         synoptic = random_walk(phi, theta, flux, nflux, dt, rng, synoptic,
                                source=params.source)
         
+        plot_hist(synoptic)
         # safety catch -- NaN
 
         # apply differential rotation mode=4 o.w. use source diffr

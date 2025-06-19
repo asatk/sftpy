@@ -1,0 +1,43 @@
+1     ; run number 
+2000. ; field strength
+2.    ; equatorial rotation in km/s
+1     ; cycle mode (1: fixed amplitude cycle)
+3     ; cycle overlap (years)
+4     ; cycle peak
+1.    ; source strength (relative to solar max)
+21.9  ; cycle duration (years)
+1     ; remove half of all concentrations after half a polarity cycle?
+1.9   ; source slope (power law index for input spectrum of bipolar regions)
+.7    ; fraction of regions NOT associated with turbulent dynamo
+1000. ; half life of flux concentrations (years)
+15000 ; maximum active region flux
+6     ; minimum active region flux
+4.2   ; joy angle 
+90.   ; joy width
+80.   ; joy e-fold
+25.   ; maximum latitude
+25.   ; latwidth
+500.  ; latfold
+2     ; meridional mode, if 2, flow weak near poles
+1.    ; meridional amplifier
+2     ; differential mode
+1.    ; differential amplifier
+1.    ; fragment
+1.    ; binflux
+3     ; collide (3 for C interface)
+1.    ; cross section multiplier
+300.  ; diffusion 
+2     ; dependence
+21600.; time step in seconds
+399999 ; nsteps
+30    ; interval between saved results (days)
+1e8   ; stellar radius (meters)
+1.4752 ; flux to gauss (10^18 Mx to Mx/cm^2)
+40.   ; flux density contour for plage perimeter (Mx/cm^2)
+standard ; run mode (test, batch, or standard)
+/home/alison/lmsal-sft-package/runs/traprotation/     ; model output path name
+/home/alison/            ; home directory
+yoursettings/yourmodelsettings.txt               ; yourmodelsettings
+yoursettings/generalsettings.txt                 ; yoursettings
+^^Initial run to test out code.  Pure simulated sun for ~23 yr.
+kit,controlfile='controlfile.txt',startrun=1,endrun=1,resume=49800l
