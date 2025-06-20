@@ -4,6 +4,8 @@ def new_bipole_fluxes(ntotal: int, p: float, binflux: float, minflux: float,
                       maxflux: float, rng):
 
     newflux = np.zeros(ntotal, dtype=np.int64)
+    if ntotal == 0:
+        return newflux
 
     ep = 1 / (1.0 - p)
     bf2 = binflux * 2

@@ -290,8 +290,3 @@ def add_sources(phi: np.ndarray,
 
     # return sourceinput?
     return nflux
-
-
-
-
-
