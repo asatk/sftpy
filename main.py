@@ -8,6 +8,7 @@ from typing import Callable
 
 from plot import plot_syn, plot_lat, plot_hist
 
+from sftpy.ar import add_sources
 from sftpy.charges import random_walk
 from sftpy.cycle import cycle_modes
 from sftpy.cycle import cyl_t
@@ -56,6 +57,9 @@ def init_sim() -> dict:
         nstepfullres=1000000,
         as_specified=False,
         polarconverge=False,
+        mode_c=1,
+        mode_d=1,
+        mode_m=2,
         remhalf=False)
 
     rng = np.random.default_rng(seed=params.seed)
@@ -76,19 +80,17 @@ def init_sim() -> dict:
 
     nflux = 2
     
+    print("initial")
     plot_syn(phi, theta, flux, nflux)
 
     # activity cycle strength mode
-    mode_c = 1
-    cycle = cycle_modes[mode_c]
+    cycle = cycle_modes[params.mode_c]
 
     # differential rotation profile
-    mode_d = 1
-    diffr = diffr_modes[mode_d]
+    diffr = diffr_modes[params.mode_d]
 
     # meridional flow behavior
-    mode_m = 2
-    merid = merid_modes[mode_m]
+    merid = merid_modes[params.mode_m]
 
 
 def loop():
@@ -97,12 +99,16 @@ def loop():
 
     time = 0.0
     dt = params.dt
+    source = params.source
 
-    for i in range(params.nstep):
-
-        print(i)
+    for i in range(1, params.nstep):
 
         time += dt
+
+        print(f"iter {i}  |  time {time:.02e}")
+        
+        plot_syn(phi, theta, flux, nflux)
+
 
         # polar converge
         # TODO do every half-cycle or just first half-cycle?
@@ -129,7 +135,6 @@ def loop():
             params.as_specified = True
             """
 
-
         nflux = decay(phi, theta, flux, nflux, params.dt, rng, params.decay_t)
         # safety catch -- NaN
         
@@ -139,7 +144,8 @@ def loop():
                 bins=(params.phibins, params.thetabins),
                 range=((0, 2*np.pi), (0, np.pi)))
 
-        plot_hist(synoptic)
+        print("decay")
+        # plot_hist(synoptic)
 
         if params.savelat:
             hist_flux, _, _ = np.histogram2d(
@@ -153,16 +159,29 @@ def loop():
 
         # moves charges in random walk step size according to diffusion coeff
         synoptic = random_walk(phi, theta, flux, nflux, dt, rng, synoptic,
-                               source=params.source)
+                               source=source)
         
-        plot_hist(synoptic)
+        print("random walk")
+        # plot_hist(synoptic)
         # safety catch -- NaN
 
+        
         # apply differential rotation mode=4 o.w. use source diffr
-        cycle(time)
+        if params.mode_d == 4:
+            ccsource = 1.0 # TODO what is cc/d/dlat source
+            source, latsource = cycle(time)
+
+            dummy = np.max(np.fabs(dsource), cyclepolarity)
+            cyclepolarity = (dsource[cyclepolarity] > 0) * 2 - 1
+            #sdifferential = cyclepolarity * differential
+        else:
+            #sdifferential = differential
+            pass
 
         # apply meridional flow mode=4 o.w. use source merid
-        cycle(time)
+        if params.mode_m == 4:
+            ccsource = 1.0 # TODO what is cc/d/dlat source
+            source, latsource = cycle(time)
 
         # alternate applying merid and diffr steps
 
@@ -192,7 +211,13 @@ def loop():
         # assimilate magnetogram data
 
         # add sources
-        # add_sources()
+        source, latsource = cycle(time)
+        source *= params.inv_pol * 2 - 1
+        # print
+
+
+        print("add sources")
+        nflux = add_sources(phi, theta, flux, nflux, dt, rng, source, latsource)
         
         # forecasting
 

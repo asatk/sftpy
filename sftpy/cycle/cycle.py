@@ -8,7 +8,9 @@ cyl_peak = 4.0          # time of peak in activity and total flux
 cyl_mult = 1.0          # relative strength of activity cycle
 
 def cycle_0(time: float):
-    ...
+    source = np.array([cyl_mult, cyl_mult], dtype=np.float64)
+    latsource = np.array([cyl_mult, cyl_mult], dtype=np.float64)
+    return source, latsource
 
 def cycle_1(time: float):
 
@@ -38,7 +40,7 @@ def cycle_1(time: float):
 
     return source, latsource
 
-def cycle_2():
+def cycle_2(time: float):
 
     a = np.full(2, 2 * np.pi / (cyl_t + 2 * cyl_overlap), dtype=np.float64)
     a[0] *= np.mod(time + cyl_t, cyl_t)
@@ -69,7 +71,7 @@ def cycle_2():
 
     return source, latsource
 
-def cycle_3():
+def cycle_3(time: float):
     return None, None
 
 # matchsolarrecords

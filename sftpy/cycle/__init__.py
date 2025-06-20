@@ -1,4 +1,5 @@
 from .cycle import cyl_t
+from .cycle import cyl_mult
 
 from .cycle import cycle_0
 from .cycle import cycle_1
@@ -16,5 +17,6 @@ cycle_modes = [
 
 __all__ = [
     "cycle_modes",
-    "cyl_t"
+    "cyl_t",
+    "cyl_mult"
 ]

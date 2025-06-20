@@ -3,6 +3,9 @@ import numpy as np
 
 def plot_hist(h: np.ndarray, phibins: int=360, thetabins: int=180):
     ind = np.nonzero(h)
+    print(ind)
+    print(h[ind])
+
     im = plt.imshow(h.T, origin='upper')
     plt.xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
     plt.xlabel(r"Azimuth $\phi$")
@@ -29,10 +32,9 @@ def plot_syn(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
     print(flux[:nflux])
     print("----")
 
-    print(h)
-    print(np.nonzero(h))
-    print(h[np.nonzero(h)])
     ind = np.nonzero(h)
+    print(ind)
+    print(h[ind])
 
     """
     # im = plt.imshow(h, extent=[0, 2*np.pi, 0, np.pi])

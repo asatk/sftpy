@@ -17,7 +17,7 @@ def random_walk(phi: np.ndarray,
                 synoptic: np.ndarray,
                 source: float=1.0,
                 difftest: np.ndarray=None,
-                dependence: int=0
+                dependence: int=2
                 ):
 
     step = np.ones(nflux, dtype=np.float64)
@@ -29,19 +29,16 @@ def random_walk(phi: np.ndarray,
         # where is difftest used
         difftest = np.sum(synoptic_abs[synoptic_abs > temp]) * dt
 
+    # TODO try to keep synoptic same shape or something
 
     # threshold out flux to only include plages
     synoptic_thr = synoptic[synoptic > thr / (binflux / 1.4752)]
     
     # TODO IDL -- compare smooth+dilation ops
-    # scipy.ndimage.filters.uniform_filter(data,size=3)
     # smooth slightly and require at least 6 neighbors to be part of plage
-    #np.convolve(synoptic_thr, np.ones(3) / 3, mode="same")
     synoptic_sm = cv.filter2D(synoptic_thr, -1,
                               np.ones((3,3), dtype=np.float64)/9)
     # dilate to add an extra ring of pixels to plage
-    #synoptic = cv.dilate(synoptic_smooth[synoptic_smooth > 5.9/9],
-    #    np.ones((3,3), dtype=np.int64)))
     synoptic_thr2 = np.asarray(synoptic_sm > 5.9 / 9, dtype=np.uint8)
     synoptic_dil = cv.dilate(synoptic_thr2, np.ones((3,3), dtype=np.uint8))
 

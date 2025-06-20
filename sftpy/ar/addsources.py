@@ -1,13 +1,42 @@
+import numpy as np
+
+from .newbipolefluxes import new_bipole_fluxes
+
+from ..constants import binflux
+
+from ..cycle import cyl_mult
+
+joy = np.pi * 4.2 / 180.0
+joy_width = np.pi * 90.0 / 18.0
+joy_fold = 80.0
+sjzero = 18.0
+
+max_lat = np.pi * 25.0 / 180.0
+lat_width = np.pi * 25.0 / 180.0
+lat_fold = 500.0
+
+turbulent = 0.7
+psource = 1.9
+
 avefluxd = 180.0
-def add_sources():
+miniflux = 6
+maxflux = 15000
+
+def add_sources(phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int,
+                dt: float,
+                rng,
+                source,
+                latsource,
+                specified=None,
+                as_specified: bool=False,
+                initialize: bool=False,
+                assimilation: bool=False,
+                gradual: bool=False):
     
-    if mode == 0:
-        source = np.array([csource])
-        source = -source if inv_pol else source
-    else:
-        source = cycle_strength()
-        source = -source if inv_pol else source
-        # print
+    # TODO place outside of add_sources
 
     if initialize:
         newflux = float(maxflux)
@@ -17,6 +46,7 @@ def add_sources():
         orient = joy * np.pi / 180
         # goto specified sources
 
+    # TODO what can we vectorize / pull out of loop?
     for i in range(len(source)):
         if specified is not None:
             newflux = specified[:,0]
@@ -31,16 +61,13 @@ def add_sources():
             # goto specified sources
         
         if np.fabs(source[i] < 1e-5):
-            # goto nextcycle
             continue
 
         a = 8.0
         a *= np.fabs(source[i])
+        p = psource
 
-        if len(miniflux) == 0:
-            minpp = 6
-        else:
-            minpp = miniflux
+        minpp = miniflux
 
         minflux = minpp / binflux
         scale = 1. / ((1.0 - p) * 1.5 ** (1.0 - p) * avefluxd ** (1.0 - p))
@@ -50,7 +77,7 @@ def add_sources():
         frac = ntotal - int(ntotal)
         ntotal = int(ntotal) + (rng.uniform() < frac)
 
-        newflux = newbipolefluxes(newfluxflag, ntotal, p, binflux, minflux, maxflux)
+        newflux = new_bipole_fluxes(ntotal, p, binflux, minflux, maxflux, rng)
 
         a = 8.0
         a *= np.fabs(source[i])**(1.0/3) * turbulent + (1 - turbulent)
@@ -62,29 +89,24 @@ def add_sources():
         frac = ntotal - int(ntotal)
         ntotal = int(ntotal) + (rng.uniform() < frac)
 
-        newflux2 = newbipolefluxes(newflux2flag, ntotal, p, binflux, minflux, maxflux)
+        newflux2 = new_bipole_fluxes(ntotal, p, binflux, minflux, maxflux, rng)
 
-        if not newfluxflag and not newflux2flag:
-            # goto nextcycle
+        if len(newflux) == 0 and len(newflux2) == 0:
             continue
 
-        if newfluxflag and newflux2flag:
-            newflux = [newflux, newflux2]
+        newflux = np.r_[newflux, newflux2]
     
-        if not newfluxflag and newflux2flag:
-            newflux = newflux2
-
         ntotal = len(newflux)
         #print
 
-        if not as_specified and csource > 1e-5:
+        if not as_specified and cyl_mult > 1e-5:
             index = newflux > (3 * avefluxd / binflux)
             if not np.any(index):
                 return
             newflux = newflux[index]
             ntotal = len(newflux)
 
-        if csource < -1e-5:
+        if cyl_mult < -1e-5:
             index = newflux < (3 * avefluxd / binflux)
             if not np.any(index):
                 return
@@ -123,10 +145,8 @@ def add_sources():
             newtheta[ind_pick[:nreplace+1]] = np.pi / 2 - np.arcsin(lat / 90 - 1)
             
         # assimilating
-        if assimilation:
-            if 'no data assimilated':
-                # goto skipremoval
-                pass
+        no_data_assimilated = False
+        if assimilation and not no_data_assimilated:
 
             if l0 is None:
                 l0 = 0.0
@@ -150,10 +170,7 @@ def add_sources():
             newtheta = newtheta[ind]
             ntotal = len(newflux)
         
-        # SKIP REMOVAL
-
         # step 3 -- orientation of bipole axes
-        sjzero = 18.0
         width = joywidth * np.exp(-binflux * newflux / joyfold) + sjzero
         orient = rng.normal(loc=joy, scale=width, size=ntotal) * np.pi / 180
         itheta = newtheta > np.pi / 2
@@ -166,74 +183,72 @@ def add_sources():
         # SPECIFIED SOURCES
 
         # step 4 -- position concentrations
-        sourceinput = 0.0
-        for j in range(ntotal):
-            newfluxi = newflux[j]
-            r = (np.sqrt(binflux * newfluxi * 1e18 / axefluxd / np.pi) + 7e8) / 7e10
-            separation = max(r, 9000 / 7e5 / 2)
+        r = (np.sqrt(binflux * newflux * 1e18 / avefluxd / np.pi) + 7e8) / 7e10
+        sep = np.clip(r, a_min=9000/7e5/2, a_max=None)
+        percon = np.asarray(np.clip(newflux / 3., a_min=1, a_max=None), 
+                            dtype=np.int64)
+        percon[newflux > 3 * 15 / binflux] = 15 / binflux
 
-            if newfluxi > 3 * 15 / binflux:
-                percon = 15 / binflux
-            else:
-                percon = int(max(newfluxi/3., 1))
+        bulk = np.clip(newflux // percon, a_min=1, a_max=None)
+        rest = np.clip(neflux - percon * bulk, a_min=0, a_max=None)
+        
+        nadd = np.ones(ntotal)
+        nadd[newflux >= bulk * percon] = bulk + (rest > 0)
 
-            bulk = max(int(newfluxi/percon))
-            rest = max(newfluxi - percon*bulk, 0)
+        r_nadd = np.repeat(r, nadd)
+        nadd_tot = np.sum(nadd)
 
-            if newfluxi >= bulk*percon:
-                nadd = bulk + (rest > 0)
-            else:
-                nadd = 1
+        offset1 = rng.uniform(high=r_nadd)
+        angle1 = rng.uniform(high=2*np.pi, size=nadd_tot)
 
-            offset1 = rng.uniform(high=r, size=nadd)
-            angle1 = rng.uniform(high=2*np.pi, size=nadd)
+        offset2 = rng.uniform(high=r_nadd)
+        angle2 = rng.uniform(high=2*np.pi, size=nadd_tot)
 
-            offset2 = rng.uniform(high=r, size=nadd)
-            angle2 = rng.uniform(high=2*np.pi, size=nadd)
+        x_tmp = np.r_[sep + offset1 * np.cos(angle1),
+                      -sep + offset2 * np.cos(angle2)]
+        y_tmp = np.r_[offset1 * np.sin(angle1),
+                      offset2 * np.sin(angle2)]
 
-            x = np.array([separation + offset1 * np.cos(angle1),
-                          -separation + offset2 * np.cos(angle2)])
-            y = np.array([offset1 * np.sin(angle1),
-                          offset2 * np.sin(angle2)])
+        orient_nadd = np.repeat(orient, nadd)
 
-            orienti = orient[j] + np.pi / 2
-            coso = np.cos(orienti)
-            sino = np.sin(orienti)
-            xo = coso * x + sino * y
-            yo = -sino * x + coso * y
+        orient_tmp = orient_nadd + np.pi / 2
+        coso = np.cos(orient_tmp)
+        sino = np.sin(orient_tmp)
+        xo = coso * x_tmp + sino * y_tmp
+        yo = -sino * x_tmp + coso * y_tmp
 
-            newphii = newphi[j]
-            newthetai = newtheta[j]
-            cosphi = np.cos(newphii)
-            sinphi = np.sin(newphii)
-            costheta = np.cos(newthetai)
-            sintheta = np.sin(newthetai)
+        newphi_nadd = np.repeat(newphi, nadd)
+        newtheta_nadd = np.repeat(newtheta, nadd)
 
-            x = cosphi * sintheta + xo * cosphi * costheta - yo * sinphi
-            y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
-            z = costheta - xo * sintheta
+        cosphi = np.cos(newphi_nadd)
+        sinphi = np.sin(newphi_nadd)
+        costheta = np.cos(newtheta_nadd)
+        sintheta = np.sin(newtheta_nadd)
 
-            aphi = np.fmod(np.arctan2(y, x) + 2 * np.pi, 2 * np.pi)
-            atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
+        x = cosphi * sintheta + xo * cosphi * costheta - yo * sinphi
+        y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
+        z = costheta - xo * sintheta
 
-            noise = np.sqrt(percon) * rng.normal(size=nadd)
+        aphi = np.fmod(np.arctan2(y, x) + 2 * np.pi, 2 * np.pi)
+        atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
 
-            if rest != 0:
-                aflux = np.asarray([percon + noise[:nadd-1],
-                                    rest,
-                                    -percon - noise[:nadd-1],
-                                    -rest],
-                                   dtype=np.int64)
-            else:
-                aflux = np.asarray([percon + noise, -percon - noise],
-                                   dtype=np.int64)
+        scale_nadd = np.repeat(np.sqrt(percon), nadd)
+        noise = rng.normal(scale=scale_nadd)
 
-            # gradual introduction of active regions
-            if gradual:
+        # TODO uhh confirm this funky index magic i made up
+        aflux = np.r_[percon + noise, -percon - noise]
+        if rest != 0:
+            aflux[nadd] = rest
+            aflux[nadd + 1 + nadd_tot] = -rest
+        
+        # TODO vectorize this loop for gradual
+        # gradual introduction of active regions
+        if gradual:
+            for j in range(ntotal):
+
                 dur = np.asarray(np.sum(np.fabs(aflux)) * binflux / 0.05 / dt)+1
                 
                 if dur > 1 or np.any((latime == 0) & (laflux != 0)):
-                    # else: goto skipgradual
 
                     an = len(aflux) / 2
                     ai = np.asarray(rng.uniform(high=dur, size=an))
@@ -266,17 +281,15 @@ def add_sources():
                         laflux = 0
                         latime = 0
 
-            # skip gradual
+        phi[nflux:nflux+2*nadd_tot] = aphi
+        theta[nflux:nflux+2*nadd_tot] = atheta
+        flux[nflux:nflux+2*nadd_tot] = aflux
 
-            phi[nflux:nflux+2*nadd] = aphi
-            theta[nflux:nflux+2*nadd] = atheta
-            flux[nflux:nflux+2*nadd] = aflux
+        sourceinput += 2.0 * np.sum(np.fabs(newflux))
+        nflux += nadd_tot * 2
 
-            sourceinput += 2.0 * np.fabs(newfluxi)
-            nflux += nadd * 2
-
-        # nextcycle
-    return
+    # return sourceinput?
+    return nflux
 
 
 
