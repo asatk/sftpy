@@ -1,6 +1,8 @@
 from matplotlib import pyplot as plt
 import numpy as np
 
+from ..cycle import cyl_mult
+
 dif_mult = 1.0
 dif_thr = 0.0
 
@@ -8,7 +10,8 @@ def diffr_1(phi: np.ndarray,
             theta: np.ndarray,
             flux: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
 
     if np.fabs(dif_mult) < 1.e-5:
         return
@@ -31,7 +34,8 @@ def diffr_2(phi: np.ndarray,
             theta: np.ndarray,
             flux: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
 
     if np.fabs(dif_mult) < 1.e-5:
         return
@@ -54,7 +58,8 @@ def diffr_3(phi: np.ndarray,
             theta: np.ndarray,
             flux: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
 
     if np.fabs(dif_mult) < 1.e-5:
         return
@@ -80,14 +85,24 @@ def diffr_4(phi: np.ndarray,
             flux: np.ndarray,
             nflux: int,
             dt: float,
-            showmap: bool=False):
+            **kwargs):
+
+    cycle = kwargs.get("cycle")
+    time = kwargs.get("time")
+
+    dsource, _ = cycle(time) / cyl_mult
+
+    dummy = np.max(np.fabs(dsource), cyclepolarity)
+    # TODO cyclepolarity = -1 or 1... so index below is same
+    cyclepolarity = (dsource[cyclepolarity] > 0) * 2 - 1
+    srcdiff = cyclepolarity * dif_mult
 
     if np.fabs(dif_mult) < 1.e-5:
         return
     
     mdiff = 1.0     # magnitude of differential rotation
     diff = np.fabs(dif_mult)    # magnitude of the relative flow
-    sdiff = np.sign(dif_mult)
+    sdiff = np.sign(srcdiff)
     
     # deg / day -> rad / step
     scale = dt * np.pi / 180 / 86400
@@ -121,7 +136,7 @@ def diffr_4(phi: np.ndarray,
     phi[fflux] += scale2_diff
     phi[sflux] -= scale2_diff
     
-    if showmap:
+    if kwargs.get("showmap"):
         synmap(phi, theta, flux, fflux, sflux, nflux)
 
 

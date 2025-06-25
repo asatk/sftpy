@@ -5,6 +5,7 @@ from . import cycle
 from . import differential
 from . import decay
 from . import meridional
+from . import util
 
 __all__ = [
         "nfluxmax",
@@ -14,6 +15,7 @@ __all__ = [
         "cycle",
         "decay",
         "differential",
-        "meridional"
+        "meridional",
+        "util"
 ]
 

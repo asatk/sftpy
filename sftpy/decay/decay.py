@@ -14,7 +14,7 @@ def decay(phi: np.ndarray,
 
     # no decay if decay timescale is too large
     if decay_t > 999:
-        return
+        return nflux
 
     # number of flux concentrations to remove for this step
     remove = 1 - np.exp(-np.log(2) * dt / 365.25 / 86400 / decay_t)
@@ -28,17 +28,19 @@ def decay(phi: np.ndarray,
     # integer number of flux concentrations to remove
     remove = np.int64(remove)
 
+    print(f"[decay] ---- remove: {remove}/{nflux}")
+
     # no flux concentrations will be removed
     if remove == 0:
-        return
+        return nflux
 
     # identify all positive and negative flux concentrations
     pos = np.nonzero(flux[:nflux] > 0)[0]
     neg = np.nonzero(flux[:nflux] < 0)[0]
 
     # TODO should this be pos < 0 and neg > 0 -- i don't understand this stmt
-    if pos[0] < 0 or neg[0] < 0:
-        return
+    if not np.any(pos) and not np.any(neg):
+        return nflux
 
     # select `remove` number of positive and negative concentrations to decay
     pos_decay = np.choice(pos, size=remove, replace=False)
@@ -48,11 +50,12 @@ def decay(phi: np.ndarray,
     flux[neg_decay] += 1
 
     # "remove 'empty' concentrations if necessary"
+    # so this takes care of concentrations that have been fully decayed
     # TODO how can we avoid this -- array list?
     ind = flux[:nflux] != 0
     ndecay = np.sum(ind)
     if ndecay == nflux:
-        return
+        return nflux
 
     nflux = ndecay
 

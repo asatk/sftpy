@@ -29,10 +29,9 @@ def random_walk(phi: np.ndarray,
         # where is difftest used
         difftest = np.sum(synoptic_abs[synoptic_abs > temp]) * dt
 
-    # TODO try to keep synoptic same shape or something
-
     # threshold out flux to only include plages
-    synoptic_thr = synoptic[synoptic > thr / (binflux / 1.4752)]
+    # binary map
+    synoptic_thr = np.astype(synoptic > thr / (binflux / 1.4752), np.uint8)
     
     # TODO IDL -- compare smooth+dilation ops
     # smooth slightly and require at least 6 neighbors to be part of plage

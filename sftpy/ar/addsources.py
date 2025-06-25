@@ -97,19 +97,19 @@ def add_sources(phi: np.ndarray,
         newflux = np.r_[newflux, newflux2]
     
         ntotal = len(newflux)
-        #print
+        print(f"[addrc] ---- ntotal = {ntotal}")
 
         if not as_specified and cyl_mult > 1e-5:
             index = newflux > (3 * avefluxd / binflux)
             if not np.any(index):
-                return
+                return nflux
             newflux = newflux[index]
             ntotal = len(newflux)
 
         if cyl_mult < -1e-5:
             index = newflux < (3 * avefluxd / binflux)
             if not np.any(index):
-                return
+                return nflux
             newflux = newflux[index]
             ntotal = len(newflux)
 
@@ -287,6 +287,9 @@ def add_sources(phi: np.ndarray,
 
         sourceinput += 2.0 * np.sum(np.fabs(newflux))
         nflux += nadd_tot * 2
+
+        print(f"[addsrc] ---- add {nadd_tot}")
+
 
     # return sourceinput?
     return nflux

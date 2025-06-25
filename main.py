@@ -15,6 +15,7 @@ from sftpy.cycle import cyl_t
 from sftpy.differential import diffr_modes
 from sftpy.meridional import merid_modes
 from sftpy.decay import decay
+from sftpy.util import synoptic_map
 
 class Params(dict):
     
@@ -60,7 +61,9 @@ def init_sim() -> dict:
         mode_c=1,
         mode_d=1,
         mode_m=2,
-        remhalf=False)
+        remhalf=False,
+        correction=1.0,
+        ff=1.0)
 
     rng = np.random.default_rng(seed=params.seed)
 
@@ -97,18 +100,26 @@ def loop():
 
     global params, phi, theta, flux, nflux, rng, cycle, diffr, merid
 
-    time = 0.0
     dt = params.dt
+    time = dt
     source = params.source
+    as_specified = params.as_specified
+    correction = params.correction
+
+    kwargs_d = {}
+    kwargs_m = {}
 
     for i in range(1, params.nstep):
 
-        time += dt
+        if params.mode_d == 4:
+            kwargs_d = dict(cycle=cycle,time=time)
 
-        print(f"iter {i}  |  time {time:.02e}")
-        
-        plot_syn(phi, theta, flux, nflux)
+        if params.mode_m == 4:
+            kwargs_m = dict(cycle=cycle,time=time)
 
+
+        print(f"[{i:8d}] -- time {time:.02e}")
+        plot_syn(phi, theta, flux, nflux, name=f"map{i:05d}.png")
 
         # polar converge
         # TODO do every half-cycle or just first half-cycle?
@@ -127,78 +138,54 @@ def loop():
 
 
         # scale control params back
-        if params.nstep - i < params.nstepfullres and params.as_specified == 0:
-            pass
-            """
-            correction /= ff
-            dt /= ff
-            params.as_specified = True
-            """
+        if params.nstep - i < params.nstepfullres and as_specified == 0:
+            correction /= params.ff
+            dt /= params.ff
+            as_specified = True
 
+        print(f"[{i:8d}|decay]")
         nflux = decay(phi, theta, flux, nflux, params.dt, rng, params.decay_t)
         # safety catch -- NaN
         
         # calculate synoptic map
-        synoptic, _, _ = np.histogram2d(
-                phi, theta, weights=np.fabs(flux),
-                bins=(params.phibins, params.thetabins),
-                range=((0, 2*np.pi), (0, np.pi)))
-
-        print("decay")
-        # plot_hist(synoptic)
+        synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
 
         if params.savelat:
-            hist_flux, _, _ = np.histogram2d(
-                    phi, theta, weights=flux,
-                    bins=(params.phibins, params.thetabins),
-                    range=((0, 2*np.pi), (0, np.pi)))
+            hist_aflux = synoptic
+            hist_flux = synoptic_map(phi, theta, flux, nflux)
             lat_aflux = np.sum(hist_aflux, axis=0)
             lat_flux = np.sum(hist_flux, axis=0)
             np.save(lat_aflux, "lat_aflux.npy")
             np.save(lat_flux, "lat_flux.npy")
 
         # moves charges in random walk step size according to diffusion coeff
+
+        print(f"[{i:8d}|random_walk]")
         synoptic = random_walk(phi, theta, flux, nflux, dt, rng, synoptic,
                                source=source)
-        
-        print("random walk")
-        # plot_hist(synoptic)
         # safety catch -- NaN
-
-        
-        # apply differential rotation mode=4 o.w. use source diffr
-        if params.mode_d == 4:
-            ccsource = 1.0 # TODO what is cc/d/dlat source
-            source, latsource = cycle(time)
-
-            dummy = np.max(np.fabs(dsource), cyclepolarity)
-            cyclepolarity = (dsource[cyclepolarity] > 0) * 2 - 1
-            #sdifferential = cyclepolarity * differential
-        else:
-            #sdifferential = differential
-            pass
-
-        # apply meridional flow mode=4 o.w. use source merid
-        if params.mode_m == 4:
-            ccsource = 1.0 # TODO what is cc/d/dlat source
-            source, latsource = cycle(time)
 
         # alternate applying merid and diffr steps
 
         # diffr dt/4 start point
-        diffr(phi, theta, flux, nflux, dt/4)
+        print(f"[{i:8d}|diffr] ---- dt/4, startpt")
+        diffr(phi, theta, flux, nflux, dt/4, **kwargs_d)
 
         # merid dt/2 step 1
-        merid(theta, nflux, dt/2)
+        print(f"[{i:8d}|merid] ---- dt/2, step1")
+        merid(theta, nflux, dt/2, **kwargs_m)
 
         # diffr dt/2 midpoint
-        diffr(phi, theta, flux, nflux, dt/2)
+        print(f"[{i:8d}|diffr] ---- dt/2, midpt")
+        diffr(phi, theta, flux, nflux, dt/2, **kwargs_d)
 
         # meriod dt/2 step 2
-        merid(theta, nflux, dt/2)
+        print(f"[{i:8d}|merid] ---- dt/2, step2")
+        merid(theta, nflux, dt/2, **kwargs_m)
 
         # diffr dt/4 endpoint
-        diffr(phi, theta, flux, nflux, dt/4)
+        print(f"[{i:8d}|diffr] ---- dt/4, endpt")
+        diffr(phi, theta, flux, nflux, dt/4, **kwargs_d)
 
         # active region inflow towards regions of strong flux density
 
@@ -211,13 +198,14 @@ def loop():
         # assimilate magnetogram data
 
         # add sources
-        source, latsource = cycle(time)
-        source *= params.inv_pol * 2 - 1
+        print(f"[{i:8d}|cycle]")
+        source_str, latsource = cycle(time)
+        source_str *= params.inv_pol * 2 - 1
         # print
 
 
-        print("add sources")
-        nflux = add_sources(phi, theta, flux, nflux, dt, rng, source, latsource)
+        print(f"[{i:8d}|add_src]")
+        nflux = add_sources(phi, theta, flux, nflux, dt, rng, source_str, latsource)
         
         # forecasting
 
@@ -225,10 +213,12 @@ def loop():
 
         # print stuff
 
+        time += dt
+        print()
+
     # finish
         
 
 if __name__ == "__main__":
-    print("coming soon")
     init_sim()
     loop()

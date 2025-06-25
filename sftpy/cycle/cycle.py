@@ -8,8 +8,10 @@ cyl_peak = 4.0          # time of peak in activity and total flux
 cyl_mult = 1.0          # relative strength of activity cycle
 
 def cycle_0(time: float):
-    source = np.array([cyl_mult, cyl_mult], dtype=np.float64)
-    latsource = np.array([cyl_mult, cyl_mult], dtype=np.float64)
+    source = np.array([cyl_mult], dtype=np.float64)
+    latsource = np.array([cyl_mult], dtype=np.float64)
+    #source = np.array([cyl_mult, cyl_mult], dtype=np.float64)
+    #latsource = np.array([cyl_mult, cyl_mult], dtype=np.float64)
     return source, latsource
 
 def cycle_1(time: float):

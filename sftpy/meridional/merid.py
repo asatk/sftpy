@@ -1,10 +1,14 @@
 import numpy as np
 
+from ..cycle import cyl_mult
+
 mer_mult: float = 1.0
 
 def merid_1(theta: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
+            
 
     if abs(mer_mult) < 1.e-5:
         return
@@ -20,7 +24,8 @@ def merid_1(theta: np.ndarray,
 
 def merid_2(theta: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
 
 
     # from km / s to rad / timestep
@@ -44,7 +49,8 @@ def merid_2(theta: np.ndarray,
 
 def merid_3(theta: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
 
     # from km / s to rad / timestep
     scale = dt / 7.e5
@@ -62,17 +68,24 @@ def merid_3(theta: np.ndarray,
 
 def merid_4(theta: np.ndarray,
             nflux: int,
-            dt: float):
+            dt: float,
+            **kwargs):
+
+    cycle = kwargs.get("cycle")
+    time = kwargs.get("time")
+
+    dsource, _ = cycle(time) / cyl_mult
+    srcmer = 2.0 - max(np.fabs(dsource))
 
     # from km / s to rad / timestep
     scale = dt / 7.e5
     th = theta[:nflux]
 
     # same as 2 but prints and smth in kit.pro (main.py)
-    if abs(mer_mult) < 1.e-5:
+    if abs(srcmer) < 1.e-5:
         return
 
-    a = 12.7 - 3 * scale * mer_mult
+    a = 12.7 - 3 * scale * srcmer
     lat = np.pi/2 - th
 
     f1 = 1 - np.exp(-np.clip(3 * th**3, a_min=-40, a_max=40))
@@ -80,4 +93,4 @@ def merid_4(theta: np.ndarray,
     f3 = a * np.sin(2*lat)
     theta[:nflux] += - f1 * f2 * f3
 
-    print("*******", mer_mult)
+    print("*******", srcmer)

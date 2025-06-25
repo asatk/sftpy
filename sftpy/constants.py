@@ -1,1 +1,1 @@
-binflux: float = 1.0e18    # Flux per bin in Mx
+binflux: float = 1.0
