@@ -1,7 +1,7 @@
 import numpy as np
 
-min_lat = 0             # minimum latitude for source emergence
-max_lat = np.pi / 2     # maximum latitude for source emergence
+min_lat = 0             # minimum latitude (deg) for source emergence
+max_lat = 25.0          # maximum latitude (deg) for source emergence
 cyl_t = 21.9            # cycle time
 cyl_overlap = 3.0       # overlap between consecutive cycles
 cyl_peak = 4.0          # time of peak in activity and total flux
@@ -34,11 +34,15 @@ def cycle_1(time: float):
                 np.clip(np.sin(a[0]), a_min=0, a_max=None)
 
     # clipped sin
-    sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
+    # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
 
-    source = np.array([1, -1]) * sin_clip * cyl_mult * a / np.pi * \
+    # flagged sin
+    sin_flag = (np.sin(a) > 0) + 0
+
+    source = np.array([1, -1]) * sin_flag * cyl_mult * a / np.pi * \
             np.exp(-(a / np.pi)**2 * b) * c
-    latsource = (max_lat - (max_lat - min_lat) * a / np.pi) * sin_clip
+    latsource = (max_lat - (max_lat - min_lat) * a / np.pi) * sin_flag
+    print(f"[cycle] ---- latsource {latsource}")
 
     return source, latsource
 
@@ -62,11 +66,14 @@ def cycle_2(time: float):
                 np.clip(np.sin(a[0]), a_min=0, a_max=None)
 
     # clipped sin
-    sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
+    # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
 
-    source = np.array([1, -1]) * sin_clip * cyl_mult * a / np.pi * \
+    # flagged sin
+    sin_flag = (np.sin(a) > 0) + 0
+
+    source = np.array([1, -1]) * sin_flag * cyl_mult * a / np.pi * \
             np.exp(-(a / np.pi)**2 * b) * c
-    latsource = (max_lat - (max_lat - min_lat) * a / np.pi) * sin_clip
+    latsource = (max_lat - (max_lat - min_lat) * a / np.pi) * sin_flag
 
     # TODO yearssn
     source *= yearssn(time, yssn, ssn)
@@ -100,11 +107,15 @@ def cycle_4(time: float):
 
     a = np.pi * np.array([(time - minima[yi]) / (yd[0] / 2 + cyl_overlap), \
                           (time - minima[yi+1]) / (yd[1] / 2 + cyl_overlap)])
-    sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
+    # clipped sin
+    # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
 
-    source = cyl_mult * sin_clip * a / np.pi * polarity[[yi,yi+1]] * \
+    # flagged sin
+    sin_flag = (np.sin(a) > 0) + 0
+
+    source = cyl_mult * sin_flag * a / np.pi * polarity[[yi,yi+1]] * \
             np.exp(-(a / np.pi) ** 2 * 8) * 8.39
-    latsource = (max_lat - (max_lat - min_lat) * a / np.pi) * sin_clip
+    latsource = (max_lat - (max_lat - min_lat) * a / np.pi) * sin_flag
 
     if polarity[yi] < 0:
         source = np.roll(source, 1)

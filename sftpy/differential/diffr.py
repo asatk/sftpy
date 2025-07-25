@@ -139,6 +139,7 @@ def diffr_4(phi: np.ndarray,
     if kwargs.get("showmap"):
         synmap(phi, theta, flux, fflux, sflux, nflux)
 
+# TODO move synmap to main.py
 
 def synmap(phi: np.ndarray,
            theta: np.ndarray,

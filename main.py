@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from typing import Callable
 
-from plot import plot_syn, plot_lat, plot_hist
+from plot import plot_syn, plot_lat, plot_hist, anim_syn
 
 from sftpy.ar import add_sources
 from sftpy.charges import random_walk
@@ -45,10 +45,11 @@ def init_sim() -> dict:
 
     params = Params(
         dt=21600,   # 6 hrs
-        nstep=400000,
+        nstep=100,
+        savestep=1,
         seed=0x2025,
         nflux=2,
-        nfluxmax=1000000,
+        nfluxmax=250000,
         decay_t=1,
         inv_pol=1,
         source=1.0,
@@ -56,14 +57,15 @@ def init_sim() -> dict:
         thetabins=180,
         savelat=False,
         nstepfullres=1000000,
-        as_specified=False,
+        as_specified=True,
         polarconverge=False,
         mode_c=1,
         mode_d=1,
         mode_m=2,
         remhalf=False,
         correction=1.0,
-        ff=1.0)
+        ff=1.0,
+        outfile="maps.npy")
 
     rng = np.random.default_rng(seed=params.seed)
 
@@ -84,7 +86,7 @@ def init_sim() -> dict:
     nflux = 2
     
     print("initial")
-    plot_syn(phi, theta, flux, nflux)
+    plot_syn(phi, theta, flux, nflux, name="map-initial.png")
 
     # activity cycle strength mode
     cycle = cycle_modes[params.mode_c]
@@ -100,16 +102,26 @@ def loop():
 
     global params, phi, theta, flux, nflux, rng, cycle, diffr, merid
 
+    nstep = params.nstep
     dt = params.dt
     time = dt
     source = params.source
     as_specified = params.as_specified
     correction = params.correction
+    savestep = params.savestep
+    outfile = params.outfile
 
     kwargs_d = {}
     kwargs_m = {}
 
-    for i in range(1, params.nstep):
+    # save synoptic maps at regular intervals
+    synoptic_all = np.empty((nstep // savestep + 1, 360, 180), dtype=np.int64)
+
+    # save initial step
+    synoptic_save = synoptic_map(phi, theta, flux, nflux)
+    synoptic_all[0] = synoptic_save
+
+    for i in range(1, nstep):
 
         if params.mode_d == 4:
             kwargs_d = dict(cycle=cycle,time=time)
@@ -119,7 +131,7 @@ def loop():
 
 
         print(f"[{i:8d}] -- time {time:.02e}")
-        plot_syn(phi, theta, flux, nflux, name=f"map{i:05d}.png")
+        # plot_syn(phi, theta, flux, nflux, name=f"map{i:05d}.png")
 
         # polar converge
         # TODO do every half-cycle or just first half-cycle?
@@ -205,7 +217,8 @@ def loop():
 
 
         print(f"[{i:8d}|add_src]")
-        nflux = add_sources(phi, theta, flux, nflux, dt, rng, source_str, latsource)
+        nflux = add_sources(phi, theta, flux, nflux, dt, rng, source_str,
+                            latsource, synoptic)
         
         # forecasting
 
@@ -213,12 +226,26 @@ def loop():
 
         # print stuff
 
+        if i % savestep == 0:
+            synoptic_save = synoptic_map(phi, theta, flux, nflux)
+            synoptic_all[i//savestep] = synoptic_save
+
         time += dt
         print()
 
     # finish
+
+    plot_syn(phi, theta, flux, nflux, name=f"map-final.png")
+
+    return synoptic_all
+
         
 
 if __name__ == "__main__":
+    outfile = "maps.npy"
+
     init_sim()
-    loop()
+    synoptic_all = loop()
+    np.save(outfile, synoptic_all)
+    anim_syn(synoptic_all)
+    plt.show()

@@ -43,8 +43,8 @@ def decay(phi: np.ndarray,
         return nflux
 
     # select `remove` number of positive and negative concentrations to decay
-    pos_decay = np.choice(pos, size=remove, replace=False)
-    neg_decay = np.choice(neg, size=remove, replace=False)
+    pos_decay = rng.choice(pos, size=remove, replace=False)
+    neg_decay = rng.choice(neg, size=remove, replace=False)
 
     flux[pos_decay] -= 1
     flux[neg_decay] += 1
@@ -57,11 +57,12 @@ def decay(phi: np.ndarray,
     if ndecay == nflux:
         return nflux
 
-    nflux = ndecay
 
-    phi[:nflux] = phi[:nflux][ind]
-    theta[:nflux] = theta[:nflux][ind]
-    flux[:nflux] = flux[:nflux][ind]
+    phi[:ndecay] = phi[:nflux][ind]
+    theta[:ndecay] = theta[:nflux][ind]
+    flux[:ndecay] = flux[:nflux][ind]
+
+    nflux = ndecay
 
     return nflux
 
