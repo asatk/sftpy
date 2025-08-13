@@ -10,6 +10,7 @@ from plot import plot_syn, plot_lat, plot_hist, anim_syn
 
 from sftpy.ar import add_sources
 from sftpy.charges import random_walk
+from sftpy.collide import collide
 from sftpy.cycle import cycle_modes
 from sftpy.cycle import cyl_t
 from sftpy.differential import diffr_modes
@@ -115,7 +116,7 @@ def loop():
     kwargs_m = {}
 
     # save synoptic maps at regular intervals
-    synoptic_all = np.empty((nstep // savestep + 1, 360, 180), dtype=np.int64)
+    synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
 
     # save initial step
     synoptic_save = synoptic_map(phi, theta, flux, nflux)
@@ -202,6 +203,8 @@ def loop():
         # active region inflow towards regions of strong flux density
 
         # test for source collisions
+        mode_col = 2
+        nflux = collide(phi, theta, flux, nflux, dt, rng, mode_col, correction, trackcancel=True)
 
         # track unsigned flux history
 

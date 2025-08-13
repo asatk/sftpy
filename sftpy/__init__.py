@@ -1,6 +1,7 @@
 from .constants import binflux
 
 from . import charges
+from . import collide
 from . import cycle
 from . import differential
 from . import decay
@@ -12,6 +13,7 @@ __all__ = [
         "binflux",
         "seed",
         "charges",
+        "collide",
         "cycle",
         "decay",
         "differential",

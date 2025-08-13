@@ -1,0 +1,202 @@
+import numpy as np
+
+# TODO same constant as in charges/charges
+diffusion = 300.0
+
+meanv = 1 / 3       # estimate of mean velocity
+
+def collide(phi: np.ndarray,
+            theta: np.ndarray,
+            flux: np.ndarray,
+            nflux: int,
+            dt: float,
+            rng,
+            mode_col: int,
+            correction: float,
+            trackcancel: bool=False):
+
+    if mode_col == 0 or nflux <= 2:
+        return nflux
+
+    # TODO shouldnt theta already be in this range?
+    theta_mod = (theta[:nflux] + np.pi) % np.pi
+    
+    ind = np.argsort(theta_mod)
+    theta[:nflux] = theta[ind]
+    phi[:nflux] = phi[ind]
+    flux[:nflux] = flux[ind]
+
+    # collision param from schrijver+ 1997 l=1400km^2/s
+    radius = 1400 / meanv * correction
+
+    crphi = radius / 7e5
+    critical = crphi ** 2 # collision distance in units of stellar radius
+    cr = int(3 * radius * 128 / 700000 + 0.5)
+
+    # coordinates
+    sintheta = np.sin(theta[:nflux])
+    x = sintheta * np.cos(phi[:nflux])
+    y = sintheta * np.sin(phi[:nflux])
+    z = np.cos(theta[:nflux])
+    r = np.stack([x, y, z])
+    rb = np.trunc((r + 1) * 128)
+
+    if mode_col == 1:
+
+        # TODO vectorize
+        for i in range(nflux-1):
+
+            # skip empty flux concentration
+            if flux[i] == 0:
+                continue
+
+            ind1 = np.nonzero(
+                    (np.sign(flux[i]) != np.sign(flux[i+1:])) & \
+                    (flux[i+1:] != 0))[0] + i+1
+
+            ind2 = np.nonzero(
+                    (np.sum(np.abs(r[:,i] - r[:,ind1]), axis=0) < cr) & \
+                    (flux[i+1:] != 0))[0] + i+1
+
+            if ind2[0] >= i+1:
+                ind3 = np.nonzero(
+                        np.sum(np.square(r[:,i] - r[:,ind2]), axis=0) < critical)[0]
+                if ind3[0] >= 0:
+                    flux[i] += np.sum(flux[ind2[ind3]])
+                    flux[ind2[ind3]] = 0    # eliminate collided particle(s)
+
+                    # TODO there are some -1s in the IDL... compare code snippets
+                    ic = rng.choice(ind3)
+                    # TODO check this is just a not empty condition
+                    if ic > 0:
+                        phi[i] = phi[index[ic]]
+                        theta[i] = theta[index[ic]]
+
+
+    if mode_col == 2:
+
+        for i in range(nflux-1):
+
+            # skip empty flux concentration
+            if flux[i] == 0:
+                continue
+
+            thetalo = theta[i] - crphi
+            lo = max(i-25, 0)
+
+            # do some mod arithmetic
+            while (theta[lo] > thetalo and lo > 0):
+                lo = max(lo-25, 0)
+
+            thetahi = theta[i] + crphi
+            hi = min(i+25, nflux-1)
+
+            # do some mod arithmetic
+            while (theta[hi] < thetahi and hi < nflux-1):
+                hi = min(hi+25, nflux-1)
+
+            lcrphi = crphi / np.sin(theta[i])
+
+            ind1 = np.nonzero(np.fabs(phi[i] - phi[lo:hi+1]) < lcrphi)[0] + lo
+            ind2 = np.nonzero(
+                    (np.sum(np.square(r[:,[i]] - r[:, ind1])) < critical) & \
+                    (flux[ind1] != 0))[0]
+
+            if trackcancel:
+                cancelflux = np.fabs(np.sum(np.fabs(flux[ind2])) - np.sum(flux[ind2]))/2
+                # TODO check if this is just a non-empty condition
+                # TODO what is this
+                if cancelflux > 0:
+                    print(f"[collide] ---- cancelflux {cancelflux}")
+
+            flux[i] = np.sum(flux[ind2])
+            n = len(ind2)
+
+            # eliminate coalesced concentrations
+            if n > 1:
+                flux[ind2[ind2 != i]] = 0
+
+                ic = rng.choice(ind2)
+                phi[i] = phi[ic]
+                theta[i] = theta[ic]
+
+    # TODO compiled C code -- just write in py for now
+    if mode_col == 3:
+        # TODO um
+        nflux = long(nflux)
+        # TODO but this isnt nflux?
+        #order = np.zeros(len(flux))
+
+        order = rng.permutation(np.arange(nflux, dtype=np.int64))
+
+        for i in range(nflux-1):
+            
+            ind = order[i]
+            
+            if flux[ind] == 0:
+                continue
+
+            thetalo = theta[ind] - crphi
+            lo = ind-25
+            if lo < 0:
+                lo = 0
+
+            while (theta[lo] > thetalo and low > 0):
+                lo = lo - range
+                if lo < 0:
+                    lo = 0
+
+            thetahi = theta[ind] + crphi
+            hi = ind+25
+            if hi > nflux-1:
+                hi = nflux-1
+
+            while (theta[hi] < thetahi and hi < nflux-1):
+                hi = hi+25
+                if hi > nflux - 1:
+                    hi = nflux-1
+
+            lcrphi = crphi / np.sin(theta[ind])
+
+            k = 0
+            for j in range(lo, hi):
+                d = phi[ind] - phi[j]
+                if d < 0:
+                    d = -d
+                if d < lcrphi:
+                    # TODO what is index?
+                    index[k] = j
+                    k += 1
+
+            n = 0
+            for j in range(k):
+                ind2 = index[j]
+                d = np.sum(np.square(r[:, ind] - r[:, ind2]))
+                if d < critical and flux[ind] != 0:
+                    index[n] = ind2
+                    n += 1
+
+            # TODO rng.choice? what is index (wht is length)
+            ic = rng.integers(n)
+            ic = index[ic]
+
+            for j in range(n):
+                if ic != index[j]:
+                    ind2 = index[j]
+                    flux[ic] += flux[ind2]
+                    flux[ind2] = 0
+
+    nfluxold = nflux
+    index = np.nonzero(flux[:nflux] != 0)[0]
+    nnew = len(index)
+    if nflux == nnew:
+        return nflux
+
+    print(f"[collide] ---- nnew {nnew}/{nflux}")
+    print(f"[collide] ---- index {index}")
+    nflux = nnew
+    phi[:nnew] = phi[index]
+    phi[:nnew] = theta[index]
+    flux[:nnew] = flux[index]
+
+    return nflux

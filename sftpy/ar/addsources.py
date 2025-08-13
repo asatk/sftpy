@@ -8,21 +8,21 @@ from ..cycle import cyl_mult
 
 # defaults from kit_iocontrol.pro
 
-joy = 7
-joy_width = 90.0
-joy_fold = 80.0
-sjzero = 18.0
+joy = 7.0           # deg
+joy_width = 90.0    # deg
+joy_fold = 80.0     # Mx
+sjzero = 18.0       # deg
 
-max_lat = 25.0
-lat_width = 45.0
-lat_fold = 500.0
+max_lat = 25.0      # deg
+lat_width = 45.0    # deg
+lat_fold = 500.0    # Mx
 
-turbulent = 0.7
-psource = 1.9
+turbulent = 0.7     # fraction of regions not w/ turbulent dynamo
+psource = 1.9       # power law index
 
-avefluxd = 180.0
-miniflux = 6
-maxflux = 15000
+avefluxd = 180.0    # G
+miniflux = 6        # Mx
+maxflux = 15000     # Mx
 
 def add_sources(phi: np.ndarray,
                 theta: np.ndarray,
