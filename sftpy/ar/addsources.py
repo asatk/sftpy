@@ -4,7 +4,8 @@ from .newbipolefluxes import new_bipole_fluxes
 
 from ..constants import binflux
 
-from ..cycle import cyl_mult
+# TODO change - just checking if cycle exists and what dir/sign?
+cyl_mult = 1.0
 
 # defaults from kit_iocontrol.pro
 

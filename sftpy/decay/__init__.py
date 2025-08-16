@@ -1,5 +1,5 @@
-from .decay import decay
+from .decay import Decay
 
 __all__ = [
-    "decay"
+    "Decay"
 ]

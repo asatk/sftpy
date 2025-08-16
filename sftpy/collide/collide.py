@@ -1,47 +1,117 @@
+import abc
 import numpy as np
 
-# TODO same constant as in charges/charges
-diffusion = 300.0
+class Collide(metaclass=abc.ABCMeta):
+    """
+    Base class for flux concentration collision component of computation sequence.
+    """
 
-meanv = 1 / 3       # estimate of mean velocity
+    meanv: float = 1 / 3    # estimate of mean velocity
 
-def collide(phi: np.ndarray,
-            theta: np.ndarray,
-            flux: np.ndarray,
-            nflux: int,
-            dt: float,
-            rng,
-            mode_col: int,
-            correction: float,
-            trackcancel: bool=False):
+    def __init__(self,
+                 dt: float,
+                 rng: np.random.Generator,
+                 correction: float=1.0,
+                 diffusion: float=300.0,    # TODO check if diff is in IDL code
+                 trackcancel: bool=False):
+        self._dt = dt
+        self._rng = rng
+        self._corr = correction
+        # TODO same constant as in charges/charges
+        self._difu = diffusion
+        self._track = trackcancel
 
-    if mode_col == 0 or nflux <= 2:
+        # collision param from schrijver+ 1997 l=1400km^2/s
+        self._radius = 1400 / self.meanv * correction
+
+        self._crphi = self._radius / 7e5
+        self._critical = self._crphi ** 2 # collision distance in units of stellar radius
+        self._cr = int(3 * self._radius * 128 / 700000 + 0.5)
+
+    def _collide_start(self,
+                       phi: np.ndarray,
+                       theta: np.ndarray,
+                       flux: np.ndarray,
+                       nflux: int):
+
+        # TODO shouldnt theta already be in this range?
+        # TODO this will be implemented via normalization components
+        # TODO wait this is weird... periodic BCs for the poles? unphysical
+        theta_mod = (theta[:nflux] + np.pi) % np.pi
+        
+        ind = np.argsort(theta_mod)
+        theta[:nflux] = theta[ind]
+        phi[:nflux] = phi[ind]
+        flux[:nflux] = flux[ind]
+
+
+        # coordinates
+        sintheta = np.sin(theta[:nflux])
+        x = sintheta * np.cos(phi[:nflux])
+        y = sintheta * np.sin(phi[:nflux])
+        z = np.cos(theta[:nflux])
+        r = np.stack([x, y, z])
+        rb = np.trunc((r + 1) * 128)
+
+        return r, rb
+
+    def _collide_finish(self,
+                        phi: np.ndarray,
+                        theta: np.ndarray,
+                        flux: np.ndarray,
+                        nflux: int):
+
+        nfluxold = nflux
+        index = np.nonzero(flux[:nflux] != 0)[0]
+        nnew = len(index)
+        if nflux == nnew:
+            return nflux
+
+        print(f"[collide finish] ---- nnew {nnew}/{nflux}")
+        print(f"[collide finish] ---- index {index}")
+        nflux = nnew
+        phi[:nnew] = phi[index]
+        phi[:nnew] = theta[index]
+        flux[:nnew] = flux[index]
+
         return nflux
 
-    # TODO shouldnt theta already be in this range?
-    theta_mod = (theta[:nflux] + np.pi) % np.pi
-    
-    ind = np.argsort(theta_mod)
-    theta[:nflux] = theta[ind]
-    phi[:nflux] = phi[ind]
-    flux[:nflux] = flux[ind]
+    @abc.abstractmethod
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
+        ...
 
-    # collision param from schrijver+ 1997 l=1400km^2/s
-    radius = 1400 / meanv * correction
 
-    crphi = radius / 7e5
-    critical = crphi ** 2 # collision distance in units of stellar radius
-    cr = int(3 * radius * 128 / 700000 + 0.5)
+class COLNone(Collide):
 
-    # coordinates
-    sintheta = np.sin(theta[:nflux])
-    x = sintheta * np.cos(phi[:nflux])
-    y = sintheta * np.sin(phi[:nflux])
-    z = np.cos(theta[:nflux])
-    r = np.stack([x, y, z])
-    rb = np.trunc((r + 1) * 128)
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
 
-    if mode_col == 1:
+        if nflux <= 2:
+            return nflux
+
+        r, rb = self._collide_start(phi, theta, flux, nflux)
+        return self._collide_finish(phi, theta, flux, nflux)
+
+
+class COL1(Collide):
+
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
+
+        if nflux <= 2:
+            return nflux
+
+        r, rb = self._collide_start(phi, theta, flux, nflux)
 
         # TODO vectorize
         for i in range(nflux-1):
@@ -60,7 +130,7 @@ def collide(phi: np.ndarray,
 
             if ind2[0] >= i+1:
                 ind3 = np.nonzero(
-                        np.sum(np.square(r[:,i] - r[:,ind2]), axis=0) < critical)[0]
+                        np.sum(np.square(r[:,i] - r[:,ind2]), axis=0) < self._critical)[0]
                 if ind3[0] >= 0:
                     flux[i] += np.sum(flux[ind2[ind3]])
                     flux[ind2[ind3]] = 0    # eliminate collided particle(s)
@@ -72,8 +142,21 @@ def collide(phi: np.ndarray,
                         phi[i] = phi[index[ic]]
                         theta[i] = theta[index[ic]]
 
+        return self._collide_finish(phi, theta, flux, nflux)
 
-    if mode_col == 2:
+
+class COL2(Collide):
+
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
+
+        if nflux <= 2:
+            return nflux
+
+        r, rb = self._collide_start(phi, theta, flux, nflux)
 
         for i in range(nflux-1):
 
@@ -81,28 +164,28 @@ def collide(phi: np.ndarray,
             if flux[i] == 0:
                 continue
 
-            thetalo = theta[i] - crphi
+            thetalo = theta[i] - self._crphi
             lo = max(i-25, 0)
 
             # do some mod arithmetic
             while (theta[lo] > thetalo and lo > 0):
                 lo = max(lo-25, 0)
 
-            thetahi = theta[i] + crphi
+            thetahi = theta[i] + self._crphi
             hi = min(i+25, nflux-1)
 
             # do some mod arithmetic
             while (theta[hi] < thetahi and hi < nflux-1):
                 hi = min(hi+25, nflux-1)
 
-            lcrphi = crphi / np.sin(theta[i])
+            lcrphi = self._crphi / np.sin(theta[i])
 
             ind1 = np.nonzero(np.fabs(phi[i] - phi[lo:hi+1]) < lcrphi)[0] + lo
             ind2 = np.nonzero(
                     (np.sum(np.square(r[:,[i]] - r[:, ind1])) < critical) & \
                     (flux[ind1] != 0))[0]
 
-            if trackcancel:
+            if self._track:
                 cancelflux = np.fabs(np.sum(np.fabs(flux[ind2])) - np.sum(flux[ind2]))/2
                 # TODO check if this is just a non-empty condition
                 # TODO what is this
@@ -120,8 +203,23 @@ def collide(phi: np.ndarray,
                 phi[i] = phi[ic]
                 theta[i] = theta[ic]
 
-    # TODO compiled C code -- just write in py for now
-    if mode_col == 3:
+        return self._collide_finish(phi, theta, flux, nflux)
+
+
+class COL3(Collide):
+
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
+
+        if nflux <= 2:
+            return nflux
+
+        r, rb = self._collide_start(phi, theta, flux, nflux)
+
+        # TODO compiled C code -- just write in py for now
         # TODO um
         nflux = long(nflux)
         # TODO but this isnt nflux?
@@ -136,7 +234,7 @@ def collide(phi: np.ndarray,
             if flux[ind] == 0:
                 continue
 
-            thetalo = theta[ind] - crphi
+            thetalo = theta[ind] - self._crphi
             lo = ind-25
             if lo < 0:
                 lo = 0
@@ -146,7 +244,7 @@ def collide(phi: np.ndarray,
                 if lo < 0:
                     lo = 0
 
-            thetahi = theta[ind] + crphi
+            thetahi = theta[ind] + self._crphi
             hi = ind+25
             if hi > nflux-1:
                 hi = nflux-1
@@ -156,7 +254,7 @@ def collide(phi: np.ndarray,
                 if hi > nflux - 1:
                     hi = nflux-1
 
-            lcrphi = crphi / np.sin(theta[ind])
+            lcrphi = self._crphi / np.sin(theta[ind])
 
             k = 0
             for j in range(lo, hi):
@@ -172,7 +270,7 @@ def collide(phi: np.ndarray,
             for j in range(k):
                 ind2 = index[j]
                 d = np.sum(np.square(r[:, ind] - r[:, ind2]))
-                if d < critical and flux[ind] != 0:
+                if d < self._critical and flux[ind] != 0:
                     index[n] = ind2
                     n += 1
 
@@ -186,17 +284,4 @@ def collide(phi: np.ndarray,
                     flux[ic] += flux[ind2]
                     flux[ind2] = 0
 
-    nfluxold = nflux
-    index = np.nonzero(flux[:nflux] != 0)[0]
-    nnew = len(index)
-    if nflux == nnew:
-        return nflux
-
-    print(f"[collide] ---- nnew {nnew}/{nflux}")
-    print(f"[collide] ---- index {index}")
-    nflux = nnew
-    phi[:nnew] = phi[index]
-    phi[:nnew] = theta[index]
-    flux[:nnew] = flux[index]
-
-    return nflux
+        return self._collide_finish(phi, theta, flux, nflux)

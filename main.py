@@ -9,14 +9,17 @@ from typing import Callable
 from plot import plot_syn, plot_lat, plot_hist, anim_syn
 
 from sftpy.ar import add_sources
-from sftpy.charges import random_walk
-from sftpy.collide import collide
-from sftpy.cycle import cycle_modes
-from sftpy.cycle import cyl_t
-from sftpy.differential import diffr_modes
-from sftpy.meridional import merid_modes
-from sftpy.decay import decay
+
+from sftpy.rwalk import RWNone, RW0, RW1, RW2
+from sftpy.collide import COLNone, COL1, COL2, COL3
+from sftpy.cycle import CYCNone, CYC1, CYC2, CYC3, CYC4
+from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
+from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
+
+from sftpy.decay import Decay
+
 from sftpy.util import synoptic_map
+from sftpy.util import WrapPhi, WrapTheta, Timestep
 
 class Params(dict):
     
@@ -26,33 +29,28 @@ class Params(dict):
     def __setattr__(self, key, value):
         self[key] = value
 
-# declare functions
-cycle: Callable
-diffr: Callable
-merid: Callable
+class Driver():
 
-# declare data arrays
-phi: np.ndarray
-theta: np.ndarray
-flux: np.ndarray
-nflux: int      # number of flux concentrations
-rng: np.random.Generator
-params: Params
+    def __init__(self, comps: list):
+        self._comps = comps
+
+    def loop(self):
+        for i in range(nstep):
+            for comp in self._comps:
+                self._comps
 
 
 def init_sim() -> dict:
 
-    global params, phi, theta, flux, nflux, rng, cycle, diffr, merid
-
     params = Params(
         dt=86400,   # 24 hrs
         #dt=21600,   # 6 hrs
-        nstep=1000,
-        savestep=100,
+        nstep=500,
+        savestep=50,
         seed=0x2025,
         nflux=2,
         nfluxmax=250000,
-        decay_t=1,
+        t_decay=1,
         inv_pol=1,
         source=1.0,
         phibins=360,
@@ -84,39 +82,51 @@ def init_sim() -> dict:
     init_flux = 100
 
     flux = np.zeros(params.nfluxmax, dtype=np.int64)
-    flux[0] = 100 * params.inv_pol
-    flux[1] = -100 * params.inv_pol
+    flux[0] = init_flux * params.inv_pol
+    flux[1] = -init_flux * params.inv_pol
 
     nflux = 2
+    
+    params.phi = phi
+    params.theta = theta
+    params.flux = flux
+    params.nflux = nflux
+    params.rng = rng
     
     print("initial")
     plot_syn(phi, theta, flux, nflux, name="map-initial.png")
 
-    # activity cycle strength mode
-    cycle = cycle_modes[params.mode_c]
-
-    # differential rotation profile
-    diffr = diffr_modes[params.mode_d]
-
-    # meridional flow behavior
-    merid = merid_modes[params.mode_m]
+    return params
 
 
-def loop():
+def loop(params: Params):
 
-    global params, phi, theta, flux, nflux, rng, cycle, diffr, merid
+    phi = params.phi
+    theta = params.theta
+    flux = params.flux
+    nflux = params.nflux
+    rng = params.rng
 
     nstep = params.nstep
     dt = params.dt
-    time = dt
     source = params.source
     as_specified = params.as_specified
     correction = params.correction
     savestep = params.savestep
     outfile = params.outfile
 
-    kwargs_d = {}
-    kwargs_m = {}
+    # define computation components
+    time = Timestep(dt)
+    pwrap = WrapPhi()
+    twrap = WrapTheta()
+    cycle = CYCNone(time)
+
+    decay = Decay(dt, rng, t_decay=1000)
+    rwalk = RWNone(dt, rng)
+    mflow = MF1(dt/2)
+    dflow1 = DF1(dt/4)
+    dflow2 = DF1(dt/2)
+    collide = COLNone(dt, rng, correction=correction)
 
     # save synoptic maps at regular intervals
     synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
@@ -127,21 +137,45 @@ def loop():
 
     for i in range(1, nstep):
 
-        if params.mode_d == 4:
-            kwargs_d = dict(cycle=cycle,time=time)
-
-        if params.mode_m == 4:
-            kwargs_m = dict(cycle=cycle,time=time)
-
-
+        time.step()
         print(f"[{i:8d}] -- time {time:.02e}")
-        # plot_syn(phi, theta, flux, nflux, name=f"map{i:05d}.png")
+
+        nflux = decay.decay(phi, theta, flux, nflux)
+        synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
+        synoptic = rwalk.move(phi, theta, flux, nflux, synoptic, source)
+        dflow1.move(phi, theta, flux, nflux)
+        pwrap(phi, nflux)
+        mflow.move(theta, nflux)
+        dflow2.move(phi, theta, flux, nflux)
+        pwrap(phi, nflux)
+        mflow.move(theta, nflux)
+        dflow1.move(phi, theta, flux, nflux)
+        pwrap(phi, nflux)
+        nflux = collide.collide(phi, theta, flux, nflux)
+
+        source_str, latsource = cycle.cycle()
+        source_str *= params.inv_pol * 2 - 1
+
+        # emerge
+
+        if i % savestep == 0:
+            synoptic_save = synoptic_map(phi, theta, flux, nflux)
+            synoptic_all[i//savestep] = synoptic_save
+
 
         print(f"[{i:8d}] -- nflux {nflux}")
         print(f"[{i:8d}] -- flux {flux[:nflux]}")
         print(f"[{i:8d}] -- theta {theta[:nflux]}")
         print(f"[{i:8d}] -- phi {phi[:nflux]}")
 
+
+    '''
+        print(f"[{i:8d}] -- nflux {nflux}")
+        print(f"[{i:8d}] -- flux {flux[:nflux]}")
+        print(f"[{i:8d}] -- theta {theta[:nflux]}")
+        print(f"[{i:8d}] -- phi {phi[:nflux]}")
+
+        """
         # polar converge
         # TODO do every half-cycle or just first half-cycle?
         if np.fmod(time + cyl_t, cyl_t) > cyl_t / 2 and not params.polarconverge and params.remhalf:
@@ -156,17 +190,19 @@ def loop():
             # see L662 kit.pro (search 'Flux imbalance 0')
             flux[nflux/2:] = flux[nflux/2:] - netflux # ensure zero totalflux
             params.polarconverge = True
+        """
 
-
+        """
         # scale control params back
         if params.nstep - i < params.nstepfullres and as_specified == 0:
             correction /= params.ff
             dt /= params.ff
             as_specified = True
+        """
 
         """
         print(f"[{i:8d}|decay]")
-        nflux = decay(phi, theta, flux, nflux, params.dt, rng, params.decay_t)
+        nflux = decay(phi, theta, flux, nflux, params.dt, rng, params.t_decay)
         # safety catch -- NaN
         """
         
@@ -251,10 +287,11 @@ def loop():
 
         time += dt
         print()
+    '''
 
     # finish
 
-    plot_syn(phi, theta, flux, nflux, name=f"map-final.png")
+    plot_syn(phi, theta, flux, nflux, name="map-final.png")
 
     return synoptic_all
 
@@ -263,8 +300,8 @@ def loop():
 if __name__ == "__main__":
     outfile = "maps.npy"
 
-    init_sim()
-    synoptic_all = loop()
+    params = init_sim()
+    synoptic_all = loop(params)
     np.save(outfile, synoptic_all)
     anim_syn(synoptic_all, params.dt*params.savestep)
     plt.show()

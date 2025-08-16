@@ -1,23 +1,23 @@
 from .constants import binflux
 
-from . import charges
 from . import collide
 from . import cycle
-from . import differential
 from . import decay
-from . import meridional
+from . import dflow
+from . import mflow
+from . import rwalk
 from . import util
 
 __all__ = [
         "nfluxmax",
         "binflux",
         "seed",
-        "charges",
         "collide",
         "cycle",
         "decay",
-        "differential",
-        "meridional",
+        "dflow",
+        "mflow",
+        "rwalk",
         "util"
 ]
 

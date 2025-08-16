@@ -74,7 +74,7 @@ def anim_syn(synoptic_all: np.ndarray, dt: float, phibins: int=360, thetabins: i
         figtitle.set_text(f"Frame {t} ({t * dt / 86400:.01f} d)")
         return im, figtitle
 
-    ms = 200
+    ms = 100
     ani = anim.FuncAnimation(fig=figa, func=_update, frames=len(synoptic_all),
                              interval=ms)
     ani.save(filename="maps.gif", writer="pillow")
