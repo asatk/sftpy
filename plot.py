@@ -57,7 +57,7 @@ def plot_lat(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
     lat_flux = np.sum(h_flux, axis=0)
 
 
-def anim_syn(synoptic_all: np.ndarray, phibins: int=360, thetabins: int=180):
+def anim_syn(synoptic_all: np.ndarray, dt: float, phibins: int=360, thetabins: int=180):
 
     figa, ax = plt.subplots(nrows=1, ncols=1)
 
@@ -67,11 +67,11 @@ def anim_syn(synoptic_all: np.ndarray, phibins: int=360, thetabins: int=180):
     ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
     ax.set_ylabel(r"Colatitude $\theta$")
     cb = plt.colorbar(im, shrink=0.6, cmap="gray")
-    figtitle = figa.suptitle("Frame 0")
+    figtitle = figa.suptitle("Frame 0 ({t * dt / 86400:.01f} d)")
 
     def _update(t):
         im = ax.imshow(synoptic_all[t].T, cmap="gray", vmin=-6.0, vmax=6.0)
-        figtitle.set_text(f"Frame {t}")
+        figtitle.set_text(f"Frame {t} ({t * dt / 86400:.01f} d)")
         return im, figtitle
 
     ms = 200

@@ -1,3 +1,4 @@
+import abc
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -5,6 +6,95 @@ from ..cycle import cyl_mult
 
 dif_mult = 1.0
 dif_thr = 0.0
+cyclepol = 1   # this changes
+
+class DifferentialFlow(metaclass=abc.ABCMeta):
+
+    def __init__(self,
+                 dt: float,
+                 dif_mult: float=1.0,
+                 dif_thr: float=0.0,
+                 cyclepol: int=1):
+        self._dt = dt
+        self._dif_mult = dif_mult
+        self._dif_thr = dif_thr
+        self._cyclepol = cyclepol
+
+    def move(self,
+             phi: np.ndarray,
+             theta: np.ndarray,
+             flux: np.ndarray,
+             nflux: int,
+             **kwargs):
+        phi[:nflux] = np.fmod(phi[:nflux], 2*np.pi)
+
+
+class dflowNone(DifferentialFlow):
+
+    def __init__(self,
+                 dt: float,
+                 dif_mult: float=1.0,
+                 dif_thr: float=0.0,
+                 cyclepol: int=1):
+        super.__init__(dt,
+                       dif_mult=dif_mult,
+                       dif_thr=dif_thr,
+                       cyclepol=cyclepol)
+
+    def move(self,
+             phi: np.ndarray,
+             theta: np.ndarray,
+             flux: np.ndarray,
+             nflux: int,
+             **kwargs):
+        super.move(phi, theta, flux, nflux, **kwargs)
+
+class dflowKomm(DifferentialFlow):
+
+    def __init__(self,
+                 dt: float,
+                 dif_mult: float=1.0,
+                 dif_thr: float=0.0,
+                 cyclepol: int=1):
+        super.__init__(dt,
+                       dif_mult=dif_mult,
+                       dif_thr=dif_thr,
+                       cyclepol=cyclepol)
+
+    def move(self,
+             phi: np.ndarray,
+             theta: np.ndarray,
+             flux: np.ndarray,
+             nflux: int,
+             **kwargs):
+
+        if np.fabs(dif_mult) < 1.e-5:
+            return
+
+        mdiff = dif_mult
+
+        # deg / day -> rad / step
+        scale = dt * np.pi / 180 / 86400
+        scale_mdiff = scale * mdiff
+
+        a = (14.255984 - 14.18) * scale_mdiff
+        b = -2.00 * scale_mdiff
+        c = -2.09 * scale_mdiff
+
+        sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
+        phi[:nflux] += b * sinlat2 + c * sinlat2**2 + a
+
+        super.move(phi, theta, flux, nflux, **kwargs)
+
+
+def diffr_0(phi: np.ndarray,
+            theta: np.ndarray,
+            flux: np.ndarray,
+            nflux: int,
+            dt: float,
+            **kwargs):
+    pass
+
 
 def diffr_1(phi: np.ndarray,
             theta: np.ndarray,
@@ -28,6 +118,7 @@ def diffr_1(phi: np.ndarray,
 
     sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
     phi[:nflux] += b * sinlat2 + c * sinlat2**2 + a
+    phi[:nflux] = np.fmod(phi[:nflux], 2*np.pi)
 
 
 def diffr_2(phi: np.ndarray,
@@ -79,7 +170,6 @@ def diffr_3(phi: np.ndarray,
         (0.8 * np.exp(-np.fabs(theta[:nflux]*180/np.pi - 90) / 80) + 0.2) + a
 
 
-
 def diffr_4(phi: np.ndarray,
             theta: np.ndarray,
             flux: np.ndarray,
@@ -87,19 +177,19 @@ def diffr_4(phi: np.ndarray,
             dt: float,
             **kwargs):
 
-    cycle = kwargs.get("cycle")
-    time = kwargs.get("time")
-
-    dsource, _ = cycle(time) / cyl_mult
-
-    dummy = np.max(np.fabs(dsource), cyclepolarity)
-    # TODO cyclepolarity = -1 or 1... so index below is same
-    cyclepolarity = (dsource[cyclepolarity] > 0) * 2 - 1
-    srcdiff = cyclepolarity * dif_mult
-
     if np.fabs(dif_mult) < 1.e-5:
         return
     
+    cycle = kwargs.get("cycle")
+    time = kwargs.get("time")
+
+    dsource = cycle(time)[0] / cyl_mult
+
+    # TODO cyclepolarity = -1 or 1... so index below is same
+    cyclepolarity = cyclepol
+    cyclepolarity = (dsource[cyclepolarity] > 0) * 2 - 1
+    srcdiff = cyclepolarity * dif_mult
+
     mdiff = 1.0     # magnitude of differential rotation
     diff = np.fabs(dif_mult)    # magnitude of the relative flow
     sdiff = np.sign(srcdiff)
@@ -118,6 +208,7 @@ def diffr_4(phi: np.ndarray,
 
     # what if flux was limited to nflux elemetns instead of whole array
 
+    # TODO this is wrong; fluxes move opposite dirs
     # fast flux and slow flux
     if sdiff > 0:
         fflux = (flux >  dif_thr) & (theta >  np.pi/6) & (theta <   np.pi/2) | \

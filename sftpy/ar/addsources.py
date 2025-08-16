@@ -48,7 +48,7 @@ def add_sources(phi: np.ndarray,
         newflux = float(maxflux)
         ntotal = 1
         newphi = 0.0
-        newtheta = np.pi / 2 - latsource[0] * np.pi / 180
+        newtheta = np.pi / 180 * (90 - latsource[0])
         orient = joy * np.pi / 180
         # goto specified sources
 

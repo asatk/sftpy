@@ -45,9 +45,10 @@ def init_sim() -> dict:
     global params, phi, theta, flux, nflux, rng, cycle, diffr, merid
 
     params = Params(
-        dt=21600,   # 6 hrs
-        nstep=100,
-        savestep=1,
+        dt=86400,   # 24 hrs
+        #dt=21600,   # 6 hrs
+        nstep=1000,
+        savestep=100,
         seed=0x2025,
         nflux=2,
         nfluxmax=250000,
@@ -60,9 +61,9 @@ def init_sim() -> dict:
         nstepfullres=1000000,
         as_specified=True,
         polarconverge=False,
-        mode_c=1,
+        mode_c=0,
         mode_d=1,
-        mode_m=2,
+        mode_m=1,
         remhalf=False,
         correction=1.0,
         ff=1.0,
@@ -80,9 +81,11 @@ def init_sim() -> dict:
     theta[1] = np.pi *  73 / 180
     theta[:2] += rng.normal(scale=np.pi * 2 / 180, size=2)
 
+    init_flux = 100
+
     flux = np.zeros(params.nfluxmax, dtype=np.int64)
-    flux[0] = 3 * params.inv_pol
-    flux[1] = -3 * params.inv_pol
+    flux[0] = 100 * params.inv_pol
+    flux[1] = -100 * params.inv_pol
 
     nflux = 2
     
@@ -134,6 +137,11 @@ def loop():
         print(f"[{i:8d}] -- time {time:.02e}")
         # plot_syn(phi, theta, flux, nflux, name=f"map{i:05d}.png")
 
+        print(f"[{i:8d}] -- nflux {nflux}")
+        print(f"[{i:8d}] -- flux {flux[:nflux]}")
+        print(f"[{i:8d}] -- theta {theta[:nflux]}")
+        print(f"[{i:8d}] -- phi {phi[:nflux]}")
+
         # polar converge
         # TODO do every half-cycle or just first half-cycle?
         if np.fmod(time + cyl_t, cyl_t) > cyl_t / 2 and not params.polarconverge and params.remhalf:
@@ -156,9 +164,11 @@ def loop():
             dt /= params.ff
             as_specified = True
 
+        """
         print(f"[{i:8d}|decay]")
         nflux = decay(phi, theta, flux, nflux, params.dt, rng, params.decay_t)
         # safety catch -- NaN
+        """
         
         # calculate synoptic map
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
@@ -173,10 +183,12 @@ def loop():
 
         # moves charges in random walk step size according to diffusion coeff
 
+        """
         print(f"[{i:8d}|random_walk]")
         synoptic = random_walk(phi, theta, flux, nflux, dt, rng, synoptic,
                                source=source)
         # safety catch -- NaN
+        """
 
         # alternate applying merid and diffr steps
 
@@ -202,9 +214,11 @@ def loop():
 
         # active region inflow towards regions of strong flux density
 
+        """
         # test for source collisions
-        mode_col = 2
+        mode_col = 0
         nflux = collide(phi, theta, flux, nflux, dt, rng, mode_col, correction, trackcancel=True)
+        """
 
         # track unsigned flux history
 
@@ -219,10 +233,12 @@ def loop():
         # print
 
 
+        """
         print(f"[{i:8d}|add_src]")
         nflux = add_sources(phi, theta, flux, nflux, dt, rng, source_str,
                             latsource, synoptic)
-        
+        """
+
         # forecasting
 
         # save timestep
@@ -250,5 +266,5 @@ if __name__ == "__main__":
     init_sim()
     synoptic_all = loop()
     np.save(outfile, synoptic_all)
-    anim_syn(synoptic_all)
+    anim_syn(synoptic_all, params.dt*params.savestep)
     plt.show()
