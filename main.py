@@ -8,15 +8,13 @@ from typing import Callable
 
 from plot import plot_syn, plot_lat, plot_hist, anim_syn
 
-from sftpy.ar import add_sources
-
-from sftpy.rwalk import RWNone, RW0, RW1, RW2
 from sftpy.collide import COLNone, COL1, COL2, COL3
 from sftpy.cycle import CYCNone, CYC1, CYC2, CYC3, CYC4
-from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
-from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
-
 from sftpy.decay import Decay
+from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
+from sftpy.emerge import BMRSchrijver
+from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
+from sftpy.rwalk import RWNone, RW0, RW1, RW2
 
 from sftpy.util import synoptic_map
 from sftpy.util import WrapPhi, WrapTheta, Timestep
@@ -43,10 +41,10 @@ class Driver():
 def init_sim() -> dict:
 
     params = Params(
-        dt=86400,   # 24 hrs
-        #dt=21600,   # 6 hrs
-        nstep=500,
-        savestep=50,
+        #dt=86400,   # 24 hrs
+        dt=21600,   # 6 hrs
+        nstep=50,
+        savestep=1,
         seed=0x2025,
         nflux=2,
         nfluxmax=250000,
@@ -109,6 +107,7 @@ def loop(params: Params):
 
     nstep = params.nstep
     dt = params.dt
+    nfluxmax = params.nfluxmax
     source = params.source
     as_specified = params.as_specified
     correction = params.correction
@@ -127,6 +126,7 @@ def loop(params: Params):
     dflow1 = DF1(dt/4)
     dflow2 = DF1(dt/2)
     collide = COLNone(dt, rng, correction=correction)
+    bmr = BMRSchrijver(dt, rng, nfluxmax)
 
     # save synoptic maps at regular intervals
     synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
@@ -144,19 +144,19 @@ def loop(params: Params):
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
         synoptic = rwalk.move(phi, theta, flux, nflux, synoptic, source)
         dflow1.move(phi, theta, flux, nflux)
-        pwrap(phi, nflux)
         mflow.move(theta, nflux)
         dflow2.move(phi, theta, flux, nflux)
-        pwrap(phi, nflux)
         mflow.move(theta, nflux)
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
+        twrap(phi, theta, nflux)
         nflux = collide.collide(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
         source_str *= params.inv_pol * 2 - 1
 
-        # emerge
+        # TODO emerge
+        phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux, source_str, latsource, synoptic)
 
         if i % savestep == 0:
             synoptic_save = synoptic_map(phi, theta, flux, nflux)
