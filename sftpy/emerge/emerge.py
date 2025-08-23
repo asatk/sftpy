@@ -1,7 +1,6 @@
 import numpy as np
 
-from .newbipolefluxes import new_bipole_fluxes
-
+from ..component import Component
 from ..constants import binflux
 
 # TODO THIS MUST BE LINKED TO CONSTANT IN MAIN
@@ -28,7 +27,9 @@ avefluxd = 180.0    # G
 miniflux = 6        # Mx
 maxflux = 15000     # Mx
 
-class BMRSchrijver():
+class BMRSchrijver(Component):
+
+    prefix = "[bmr-cjs]"
 
     def __init__(self,
                  dt: float,
@@ -38,7 +39,9 @@ class BMRSchrijver():
                  as_specified: bool=True,
                  initialize: bool=False,
                  assimilation: bool=False,
-                 gradual: bool=False):
+                 gradual: bool=False,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._dt = dt
         self._rng = rng
         self._nfluxmax = nfluxmax
@@ -109,7 +112,7 @@ class BMRSchrijver():
             frac = ntotal - int(ntotal)
             ntotal = int(ntotal) + (rng.uniform() < frac)
 
-            newflux = new_bipole_fluxes(ntotal, p, binflux, minflux, maxflux, rng)
+            newflux = self.new_bipole_fluxes(ntotal, p, binflux, minflux, maxflux, rng)
 
             a = 8.0
             a *= np.fabs(source[i])**(1.0/3) * turbulent + (1 - turbulent)
@@ -121,24 +124,24 @@ class BMRSchrijver():
             frac = ntotal2 - int(ntotal2)
             ntotal2 = int(ntotal2) + (rng.uniform() < frac)
 
-            newflux2 = new_bipole_fluxes(ntotal2, p, binflux, minflux, maxflux, rng)
+            newflux2 = self.new_bipole_fluxes(ntotal2, p, binflux, minflux, maxflux, rng)
 
             if len(newflux) == 0 and len(newflux2) == 0:
                 continue
 
             newflux = np.r_[newflux, newflux2]
         
-            print(f"[addsrc] ---- ntotal = {ntotal}   ntotal2 = {ntotal2}")
+            self.log(1, f"ntotal = {ntotal}   ntotal2 = {ntotal2}")
             ntotal = len(newflux)
-            print(f"[addsrc] ---- ntotal (all) = {ntotal}")
+            self.log(1, f"ntotal (all) = {ntotal}")
 
             # TODO -- this mode emerges nothing...
             # accelerated-time mode; leave out ephemeral regions
             if not as_specified and cyl_mult > 1e-5:
-                print(f"[addsrc] ---- NEWFLUX {newflux}")
+                self.log(2, f"NEWFLUX {newflux}")
                 index = newflux > (3 * avefluxd / binflux)
                 if not np.any(index):
-                    print("[addsrc] ---- NO SOURCES PASS THRESHOLD")
+                    self.log(2, "NO SOURCES PASS THRESHOLD")
                     return phi, theta, flux, nflux
                 newflux = newflux[index]
                 ntotal = len(newflux)
@@ -166,9 +169,9 @@ class BMRSchrijver():
                 npick = np.sum(ind_pick)
 
                 if npick > 0:
-                    print(f"[addsrc] ---- nnest={nnest} npick={npick}")
-                    print(f"[addsrc] ---- ind_nest {ind_nest}")
-                    print(f"[addsrc] ---- ind_pick {ind_pick}")
+                    self.log(2, f"nnest={nnest} npick={npick}")
+                    self.log(2, f"ind_nest {ind_nest}")
+                    self.log(2, f"ind_pick {ind_pick}")
                     ind_nest_picks = ind_nest[ind_pick]
 
                     xx = np.zeros(180, dtype=np.byte)
@@ -176,25 +179,27 @@ class BMRSchrijver():
                     yy = np.ones(360, dtype=np.byte)
                     # TODO check this matmult
                     # ind = (synoptic * np.outer(yy, xx)) != 0
-                    ind = np.ravel((synoptic * np.outer(yy, xx))) != 0
-                    nind = np.sum(ind)
+                    ind = np.nonzero(np.ravel((synoptic * np.outer(yy, xx))) != 0)[0]
+                    nind = len(ind)
 
                     if nind > 0:
                         nreplace = min(npick, nind)
-                        print(f"[addsrc] ---- NEST nreplace = {nreplace}")
+                        self.log(3, f"NEST nreplace = {nreplace}")
                         point = rng.choice(ind, replace=False, size=nreplace)
                         lat = point / 360
                         # TODO check the  +1 on these
-                        print(f"[addsrc] ---- NEST point = {point.shape}")
-                        print(f"[addsrc] ---- NEST lat = {lat.shape}")
-                        print(f"[addsrc] ---- NEST ind_nest_picks = {ind_nest_picks.shape}")
-                        print(f"[addsrc] ---- NEST new_phi = {newphi.shape}")
+                        self.log(3, f"NEST point = {point.shape}")
+                        self.log(3, f"NEST lat = {lat.shape}")
+                        self.log(3, f"NEST ind_nest_picks = {ind_nest_picks.shape}")
+                        self.log(3, f"NEST new_phi = {newphi.shape}")
                         newphi[ind_nest_picks[:nreplace]] = point - 360 * lat
                         newtheta[ind_nest_picks[:nreplace]] = np.pi / 2 - np.arcsin(lat / 90 - 1)
                     else:
+                        self.log(3, "NEST no nests")
                         # goto nonests
                         pass
                 else:
+                    self.log(3, "NEST no nests")
                     # goto nonests
                     pass
                 
@@ -296,9 +301,9 @@ class BMRSchrijver():
             aphi = np.fmod(np.arctan2(y, x) + 2 * np.pi, 2 * np.pi)
             atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
 
-            print(f"[addsrc] ---- aphi {aphi.shape}")
-            print(f"[addsrc] ---- atheta {atheta.shape}")
-            print(f"[addsrc] ---- mean atheta {np.mean(atheta)} std atheta "
+            self.log(1, f"aphi {aphi.shape}")
+            self.log(1, f"atheta {atheta.shape}")
+            self.log(1, f"mean atheta {np.mean(atheta)} std atheta "
                   f"{np.std(atheta)}")
 
             scale_nadd = np.sqrt(percon_nadd)
@@ -325,7 +330,7 @@ class BMRSchrijver():
                     
                     if dur > 1 or np.any((latime == 0) & (laflux != 0)):
                         
-                        print(f"[addsrc] ---- gradual flux emergence")
+                        self.log(2, f"gradual flux emergence")
 
                         an = len(aflux) / 2
                         ai = np.asarray(rng.uniform(high=dur, size=an))
@@ -359,16 +364,16 @@ class BMRSchrijver():
                             latime = 0
 
 
-            print(f"[addsrc] ---- nadd_tot {nadd_tot}")
-            print(f"[addsrc] ---- 2*nadd_tot {2*nadd_tot}")
-            print(f"[addsrc] ---- nflux+2*nadd_tot {nflux+2*nadd_tot}")
-            print(f"[addsrc] ---- phi[nflux:nflux+2*nadd_tot] {phi[nflux:nflux+2*nadd_tot].shape}")
+            self.log(1, f"nadd_tot {nadd_tot}")
+            self.log(1, f"2*nadd_tot {2*nadd_tot}")
+            self.log(1, f"nflux+2*nadd_tot {nflux+2*nadd_tot}")
+            self.log(1, f"phi[nflux:nflux+2*nadd_tot] {phi[nflux:nflux+2*nadd_tot].shape}")
             if nflux + 2 * nadd_tot >= self._nfluxmax:
                 
                 while nflux + 2 * nadd_tot >= self._nfluxmax:
                     self._nfluxmax *= 2
 
-                print(f"[addsrc] ---- nfluxmax {self._nfluxmax}")
+                self.log(2, f"nfluxmax {self._nfluxmax}")
 
                 phi_cp = np.empty(self._nfluxmax)
                 theta_cp = np.empty(self._nfluxmax)
@@ -377,7 +382,6 @@ class BMRSchrijver():
                 phi_cp[:nflux] = np.copy(phi[:nflux])
                 theta_cp[:nflux] = np.copy(theta[:nflux])
                 flux_cp[:nflux] = np.copy(flux[:nflux])
-
 
                 phi = phi_cp
                 theta = theta_cp
@@ -390,8 +394,34 @@ class BMRSchrijver():
             sourceinput += 2.0 * np.sum(np.fabs(newflux))
             nflux += nadd_tot * 2
 
-            print(f"[addsrc] ---- add {nadd_tot}")
+            self.log(1, f"add {nadd_tot}")
 
 
         # return sourceinput?
         return phi, theta, flux, nflux
+
+    def new_bipole_fluxes(self, ntotal: int, p: float, binflux: float, minflux: float,
+                          maxflux: float, rng):
+
+        newflux = np.zeros(ntotal, dtype=np.int64)
+        if ntotal == 0:
+            return newflux
+
+        self.log(3, f"NEWBMRFLUX p={p} minflux={minflux} maxflux={maxflux} binflux={binflux}")
+
+        ep = 1 / (1.0 - p)
+        bf2 = binflux * 2
+        mbinflux = maxflux / binflux
+
+        newvals = np.astype((p * rng.uniform(size=ntotal) ** ep + 0.5) / bf2,
+                            np.int64)
+
+        notvalid = (newvals < minflux) & (newvals >= mbinflux)
+        while np.any(notvalid):
+            nreplace = np.sum(notvalid)
+            replacevals = np.astype((p * rng.uniform(size=nreplace) ** ep + 0.5) / bf2,
+                                    np.int64)
+            newvals[notvalid] = replacevals
+            notvalid = (newvals < minflux) & (newvals >= mbinflux)
+
+        return newvals

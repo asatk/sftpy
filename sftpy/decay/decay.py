@@ -4,21 +4,27 @@ Decay field
 
 import numpy as np
 
-class Decay():
+from ..component import Component
+
+class Decay(Component):
     """
     Component class for random decay of flux conecentrations.
     """
 
+    prefix = "[decay]"
+
     def __init__(self,
                  dt: float,
                  rng: np.random.Generator,
-                 t_decay: float):
+                 t_decay: float,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._rng = rng
         self._factor = 1 - np.exp(-np.log(2) * dt / 365.25 / 86400 / t_decay)
 
         # no decay if decay timescale is too large
         if t_decay > 999:
-            print("bruh that's too long")
+            self.log(2, "extremely long decay time; decay ignored")
             return None
 
 
@@ -39,7 +45,7 @@ class Decay():
         # integer number of flux concentrations to remove
         remove = np.int64(remove)
 
-        print(f"[decay] ---- remove: {remove}/{nflux}")
+        self.log(1, f"remove: {remove}/{nflux}")
 
         # no flux concentrations will be removed
         if remove == 0:
@@ -68,7 +74,6 @@ class Decay():
 
         if ndecay == nflux:
             return nflux
-
 
         phi[:ndecay] = phi[:nflux][ind]
         theta[:ndecay] = theta[:nflux][ind]

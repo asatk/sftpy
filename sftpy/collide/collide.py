@@ -1,19 +1,24 @@
 import abc
 import numpy as np
 
-class Collide(metaclass=abc.ABCMeta):
+from ..component import Component
+
+class Collide(Component, metaclass=abc.ABCMeta):
     """
     Base class for flux concentration collision component of computation sequence.
     """
 
     meanv: float = 1 / 3    # estimate of mean velocity
+    prefix = "[collide]"
 
     def __init__(self,
                  dt: float,
                  rng: np.random.Generator,
                  correction: float=1.0,
                  diffusion: float=300.0,    # TODO check if diff is in IDL code
-                 trackcancel: bool=False):
+                 trackcancel: bool=False,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._dt = dt
         self._rng = rng
         self._corr = correction
@@ -67,8 +72,8 @@ class Collide(metaclass=abc.ABCMeta):
         if nflux == nnew:
             return nflux
 
-        print(f"[collide finish] ---- nnew {nnew}/{nflux}")
-        print(f"[collide finish] ---- index {index}")
+        self.log(2, f"[collide finish] ---- nnew {nnew}/{nflux}")
+        self.log(2, f"[collide finish] ---- index {index}")
         nflux = nnew
         phi[:nnew] = phi[index]
         phi[:nnew] = theta[index]
@@ -190,7 +195,7 @@ class COL2(Collide):
                 # TODO check if this is just a non-empty condition
                 # TODO what is this
                 if cancelflux > 0:
-                    print(f"[collide] ---- cancelflux {cancelflux}")
+                    self.log(1, f"[collide] ---- cancelflux {cancelflux}")
 
             flux[i] = np.sum(flux[ind2])
             n = len(ind2)

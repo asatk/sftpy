@@ -16,8 +16,8 @@ from sftpy.emerge import BMRSchrijver
 from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
 from sftpy.rwalk import RWNone, RW0, RW1, RW2
 
-from sftpy.util import synoptic_map
-from sftpy.util import WrapPhi, WrapTheta, Timestep
+from sftpy.util import Logger, synoptic_map, Timestep
+from sftpy.misc import WrapPhi, WrapTheta
 
 class Params(dict):
     
@@ -42,8 +42,9 @@ def init_sim() -> dict:
 
     params = Params(
         #dt=86400,   # 24 hrs
-        dt=21600,   # 6 hrs
-        nstep=50,
+        #dt=21600,   # 6 hrs
+        dt=3600*3,   # 1 hr
+        nstep=30,
         savestep=1,
         seed=0x2025,
         nflux=2,
@@ -57,13 +58,11 @@ def init_sim() -> dict:
         nstepfullres=1000000,
         as_specified=True,
         polarconverge=False,
-        mode_c=0,
-        mode_d=1,
-        mode_m=1,
         remhalf=False,
         correction=1.0,
         ff=1.0,
-        outfile="maps.npy")
+        outfile="maps.npy",
+        loglvl=0)
 
     rng = np.random.default_rng(seed=params.seed)
 
@@ -114,6 +113,9 @@ def loop(params: Params):
     savestep = params.savestep
     outfile = params.outfile
 
+    # logger
+    logger = Logger(params.loglvl, "[loop]")
+
     # define computation components
     time = Timestep(dt)
     pwrap = WrapPhi()
@@ -122,9 +124,9 @@ def loop(params: Params):
 
     decay = Decay(dt, rng, t_decay=1000)
     rwalk = RWNone(dt, rng)
-    mflow = MF1(dt/2)
-    dflow1 = DF1(dt/4)
-    dflow2 = DF1(dt/2)
+    mflow = MFNone(dt/2)
+    dflow1 = DFNone(dt/4)
+    dflow2 = DFNone(dt/2)
     collide = COLNone(dt, rng, correction=correction)
     bmr = BMRSchrijver(dt, rng, nfluxmax)
 
@@ -138,7 +140,7 @@ def loop(params: Params):
     for i in range(1, nstep):
 
         time.step()
-        print(f"[{i:8d}] -- time {time:.02e}")
+        logger.log(0, f"[{i:d}] time {time:.02e}")
 
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
@@ -155,7 +157,6 @@ def loop(params: Params):
         source_str, latsource = cycle.cycle()
         source_str *= params.inv_pol * 2 - 1
 
-        # TODO emerge
         phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux, source_str, latsource, synoptic)
 
         if i % savestep == 0:
@@ -163,18 +164,13 @@ def loop(params: Params):
             synoptic_all[i//savestep] = synoptic_save
 
 
-        print(f"[{i:8d}] -- nflux {nflux}")
-        print(f"[{i:8d}] -- flux {flux[:nflux]}")
-        print(f"[{i:8d}] -- theta {theta[:nflux]}")
-        print(f"[{i:8d}] -- phi {phi[:nflux]}")
+        logger.log(0, f"nflux {nflux}")
+        logger.log(2, f"flux {flux[:nflux]}")
+        logger.log(2, f"theta {theta[:nflux]}")
+        logger.log(2, f"phi {phi[:nflux]}")
 
 
     '''
-        print(f"[{i:8d}] -- nflux {nflux}")
-        print(f"[{i:8d}] -- flux {flux[:nflux]}")
-        print(f"[{i:8d}] -- theta {theta[:nflux]}")
-        print(f"[{i:8d}] -- phi {phi[:nflux]}")
-
         """
         # polar converge
         # TODO do every half-cycle or just first half-cycle?
@@ -201,8 +197,7 @@ def loop(params: Params):
         """
 
         """
-        print(f"[{i:8d}|decay]")
-        nflux = decay(phi, theta, flux, nflux, params.dt, rng, params.t_decay)
+        # decay field
         # safety catch -- NaN
         """
         
@@ -227,34 +222,8 @@ def loop(params: Params):
         """
 
         # alternate applying merid and diffr steps
-
-        # diffr dt/4 start point
-        print(f"[{i:8d}|diffr] ---- dt/4, startpt")
-        diffr(phi, theta, flux, nflux, dt/4, **kwargs_d)
-
-        # merid dt/2 step 1
-        print(f"[{i:8d}|merid] ---- dt/2, step1")
-        merid(theta, nflux, dt/2, **kwargs_m)
-
-        # diffr dt/2 midpoint
-        print(f"[{i:8d}|diffr] ---- dt/2, midpt")
-        diffr(phi, theta, flux, nflux, dt/2, **kwargs_d)
-
-        # meriod dt/2 step 2
-        print(f"[{i:8d}|merid] ---- dt/2, step2")
-        merid(theta, nflux, dt/2, **kwargs_m)
-
-        # diffr dt/4 endpoint
-        print(f"[{i:8d}|diffr] ---- dt/4, endpt")
-        diffr(phi, theta, flux, nflux, dt/4, **kwargs_d)
-
         # active region inflow towards regions of strong flux density
-
-        """
         # test for source collisions
-        mode_col = 0
-        nflux = collide(phi, theta, flux, nflux, dt, rng, mode_col, correction, trackcancel=True)
-        """
 
         # track unsigned flux history
 
@@ -262,31 +231,19 @@ def loop(params: Params):
 
         # assimilate magnetogram data
 
-        # add sources
-        print(f"[{i:8d}|cycle]")
+        # cycle
         source_str, latsource = cycle(time)
         source_str *= params.inv_pol * 2 - 1
         # print
 
 
-        """
-        print(f"[{i:8d}|add_src]")
-        nflux = add_sources(phi, theta, flux, nflux, dt, rng, source_str,
-                            latsource, synoptic)
-        """
+        # add sources
 
         # forecasting
 
         # save timestep
 
         # print stuff
-
-        if i % savestep == 0:
-            synoptic_save = synoptic_map(phi, theta, flux, nflux)
-            synoptic_all[i//savestep] = synoptic_save
-
-        time += dt
-        print()
     '''
 
     # finish

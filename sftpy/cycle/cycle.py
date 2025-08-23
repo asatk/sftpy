@@ -1,11 +1,13 @@
 import abc
 import numpy as np
 
-from ..util.components import Timestep
+from ..component import Component
+from ..util import Timestep
 
 
-class Cycle(metaclass=abc.ABCMeta):
+class Cycle(Component, metaclass=abc.ABCMeta):
 
+    prefix = "[cycle]"
     
     def __init__(self,
                  timestep: Timestep,
@@ -14,7 +16,9 @@ class Cycle(metaclass=abc.ABCMeta):
                  period: float=21.9,
                  ovr: float=3.0,
                  peak: float=4.0,
-                 mult: float=1.0):
+                 mult: float=1.0,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._timestep = timestep
         self._latlo = latlo   # minimum latitude (deg) for source emergence
         self._lathi = lathi   # maximum latitude (deg) for source emergence
@@ -29,6 +33,8 @@ class Cycle(metaclass=abc.ABCMeta):
 
 class CYCNone(Cycle):
 
+    prefix = "[cycle-none]"
+
     def cycle(self):
         source = np.array([self._mult], dtype=np.float64)
         latsource = np.array([self._mult], dtype=np.float64)
@@ -38,10 +44,14 @@ class CYCNone(Cycle):
 
 
 class CYC3(CYCNone):
+
+    prefix = "[cycle-3]"
     ...
 
 
 class CYC1(Cycle):
+
+    prefix = "[cycle-1]"
 
     def cycle(self):
 
@@ -73,13 +83,15 @@ class CYC1(Cycle):
         source = np.array([1, -1]) * sin_flag * self._mult * a / np.pi * \
                 np.exp(-(a / np.pi)**2 * b) * c
         latsource = (self._lathi - (self._lathi - self._latlo) * a / np.pi) * sin_flag
-        print(f"[cycle] ---- latsource {latsource}")
+        self.log(1, f"latsource {latsource}")
 
         return source, latsource
 
 
 class CYC2(Cycle):
     
+    prefix = "[cycle-2]"
+
     def cycle(self):
 
         time = self._timestep.time()
@@ -118,6 +130,8 @@ class CYC2(Cycle):
 
 
 class CYC4(Cycle):
+
+    prefix = "[cycle-4]"
 
     minima = np.array([
         1635.1, 1646.0, 1657, 1668, 1679, 1690, 1700, 1713.5, 1724.0, 1733.5,

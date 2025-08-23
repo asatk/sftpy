@@ -2,17 +2,22 @@ import abc
 from matplotlib import pyplot as plt
 import numpy as np
 
+from ..component import Component
 from ..cycle import Cycle
 
-class DifferentialFlow(metaclass=abc.ABCMeta):
+class DifferentialFlow(Component, metaclass=abc.ABCMeta):
     """
     Base class for differential flow component of computation sequence.
     """
 
+    prefix = "[dflow]"
+
     def __init__(self,
                  dt: float,
                  dif_mult: float=1.0,
-                 cyclepol: int=1):
+                 cyclepol: int=1,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._dt = dt
         self._dif_mult = dif_mult
         self._cyclepol = cyclepol
@@ -29,6 +34,8 @@ class DifferentialFlow(metaclass=abc.ABCMeta):
 
 class DFNone(DifferentialFlow):
 
+    prefix = "[dflow-none]"
+
     def move(self,
              phi: np.ndarray,
              theta: np.ndarray,
@@ -38,6 +45,8 @@ class DFNone(DifferentialFlow):
 
 
 class DF1(DifferentialFlow):
+
+    prefix = "[dflow-1]"
 
     def move(self,
              phi: np.ndarray,
@@ -64,6 +73,8 @@ class DF1(DifferentialFlow):
 
 class DF2(DifferentialFlow):
 
+    prefix = "[dflow-2]"
+
     def move(self,
              phi: np.ndarray,
              theta: np.ndarray,
@@ -88,6 +99,8 @@ class DF2(DifferentialFlow):
 
 
 class DF3(DifferentialFlow):
+
+    prefix = "[dflow-3]"
 
     def move(self,
              phi: np.ndarray,
@@ -114,6 +127,8 @@ class DF3(DifferentialFlow):
 
 
 class DF4(DifferentialFlow):
+
+    prefix = "[dflow-4]"
 
     def __init__(self,
                  dt: float,

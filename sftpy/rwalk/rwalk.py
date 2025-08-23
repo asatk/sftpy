@@ -2,17 +2,21 @@ import abc
 import cv2 as cv
 import numpy as np
 
+from ..component import Component
 from ..constants import binflux
 
 
-class RandomWalk(metaclass=abc.ABCMeta):
+class RandomWalk(Component, metaclass=abc.ABCMeta):
 
+    prefix = "[rwalk]"
 
     def __init__(self,
                  dt: float,
                  rng: np.random.Generator,
                  thr: float=40.0,
-                 diffusion: float=300.0):
+                 diffusion: float=300.0,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._dt = dt
         self._rng = rng
         # threshold in gauss for map of abs flux density
@@ -95,6 +99,8 @@ class RandomWalk(metaclass=abc.ABCMeta):
 
 class RWNone(RandomWalk):
 
+    prefix = "[rwalk-none]"
+
     def move(self,
              phi: np.ndarray,
              theta: np.ndarray,
@@ -109,6 +115,8 @@ class RWNone(RandomWalk):
 
 class RW0(RandomWalk):
 
+    prefix = "[rwalk-0]"
+
     def move(self,
              phi: np.ndarray,
              theta: np.ndarray,
@@ -122,7 +130,7 @@ class RW0(RandomWalk):
         step = np.ones(nflux, dtype=np.float64)
 
         # evaluate the actual stepping distance
-        step = np.sqrt(4 * self._diffusion * step * dt) / 7.e5
+        step = np.sqrt(4 * self._diffusion * step * self._dt) / 7.e5
 
         self._move_finish(phi, theta, step, nflux)
 
@@ -130,6 +138,8 @@ class RW0(RandomWalk):
 
 
 class RW1(RandomWalk):
+
+    prefix = "[rwalk-1]"
 
     def move(self,
              phi: np.ndarray,
@@ -159,7 +169,7 @@ class RW1(RandomWalk):
             step[ind1] = 110.0 / 250.0
 
         # evaluate the actual stepping distance
-        step = np.sqrt(4 * self._diffusion * step * dt) / 7.e5
+        step = np.sqrt(4 * self._diffusion * step * self._dt) / 7.e5
 
         self._move_finish(phi, theta, step, nflux)
 
@@ -168,6 +178,8 @@ class RW1(RandomWalk):
 
 class RW2(RandomWalk):
 
+    prefix = "[rwalk-2]"
+    
     def move(self,
              phi: np.ndarray,
              theta: np.ndarray,
@@ -181,7 +193,7 @@ class RW2(RandomWalk):
         step = np.ones(nflux, dtype=np.float64)
 
         # evaluate the actual stepping distance
-        step = np.sqrt(4 * self._diffusion * step * dt) / 7.e5
+        step = np.sqrt(4 * self._diffusion * step * self._dt) / 7.e5
 
         # if flux-dependent steps are required, apply correction to concentrations
         # contained in a plage. See Schrijver+ 96 and PhD thesis Hagenaar p119 f7.4.

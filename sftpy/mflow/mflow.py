@@ -1,15 +1,20 @@
 import abc
 import numpy as np
 
+from ..component import Component
 
-class MeridionalFlow(metaclass=abc.ABCMeta):
+class MeridionalFlow(Component, metaclass=abc.ABCMeta):
     """
     Base class for meridional flow component of computation sequence
     """
 
+    prefix = "[mflow]"
+
     def __init__(self,
                  dt: float,
-                 mer_mult: float=1.0):
+                 mer_mult: float=1.0,
+                 loglvl: int=0):
+        super().__init__(loglvl)
         self._dt = dt
         self._mer_mult = mer_mult
     
@@ -21,6 +26,8 @@ class MeridionalFlow(metaclass=abc.ABCMeta):
 
 class MFNone(MeridionalFlow):
 
+    prefix = "[mflow-none]"
+
     def move(self,
              theta: np.ndarray,
              nflux: int):
@@ -29,10 +36,13 @@ class MFNone(MeridionalFlow):
 
 class MF1(MeridionalFlow): 
 
+    prefix = "[mflow-1]"
+
     def __init__(self,
                  dt: float,
-                 mer_mult: float=1.0):
-        super().__init__(dt)
+                 mer_mult: float=1.0,
+                 loglvl: int=0):
+        super().__init__(dt, mer_mult, loglvl)
         self._a = 12.9e-3 * dt / 7.e5 * mer_mult
         self._b = 1.4e-3 * dt / 7.e5 * mer_mult
 
@@ -47,9 +57,12 @@ class MF1(MeridionalFlow):
 
 class MF2(MeridionalFlow):
 
+    prefix = "[mflow-2]"
+
     def __init__(self,
                  dt: float,
-                 mer_mult: float=1.0):
+                 mer_mult: float=1.0,
+                 loglvl: int=0):
         super().__init__(dt)
         self._a = 12.7e-3 * dt / 7.e5 * mer_mult
 
@@ -71,10 +84,13 @@ class MF2(MeridionalFlow):
 
 class MF3(MeridionalFlow):
 
+    prefix = "[mflow-3]"
+
     def __init__(self,
                  dt: float,
-                 mer_mult: float):
-        super().__init__(dt)
+                 mer_mult: float,
+                 loglvl: int=0):
+        super().__init__(dt, mer_mult, loglvl)
         # from km / s to rad / timestep
         self._a = 12.7e-3 * dt / 7.e5
         self._mer_mult = mer_mult
@@ -95,11 +111,14 @@ class MF3(MeridionalFlow):
 
 
 class MF4(MeridionalFlow):
+
+    prefix = "[mflow-4]"
     
     def __init__(self,
                  dt: float,
-                 cycle):
-        super().__init__(dt)
+                 cycle,
+                 loglvl: int=0):
+        super().__init__(dt, mer_mult=0.0, loglvl=loglvl)
         self._dt = dt
         self._cycle = cycle
 
@@ -127,4 +146,4 @@ class MF4(MeridionalFlow):
         f3 = a * np.sin(2*lat)
         theta[:nflux] += - f1 * f2 * f3
 
-        print("*******", srcmer)
+        self.log(1, f"******* {srcmer}")
