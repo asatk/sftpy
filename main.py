@@ -128,7 +128,7 @@ def loop(params: Params):
     dflow1 = DFNone(dt/4)
     dflow2 = DFNone(dt/2)
     collide = COLNone(dt, rng, correction=correction)
-    bmr = BMRSchrijver(dt, rng, nfluxmax)
+    bmr = BMRSchrijver(dt, rng, nfluxmax, loglvl=2)
 
     # save synoptic maps at regular intervals
     synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)

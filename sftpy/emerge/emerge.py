@@ -306,6 +306,13 @@ class BMRSchrijver(Component):
             self.log(1, f"mean atheta {np.mean(atheta)} std atheta "
                   f"{np.std(atheta)}")
 
+            self.plot(2, "hist", atheta, bins=20)
+            self.plot(2, "xticks", [0, np.pi/2, np.pi], ["0", r"$\pi/2$", r"$\pi$"])
+            self.plot(2, "xlim", (0, np.pi))
+            self.plot(2, "show")
+
+
+
             scale_nadd = np.sqrt(percon_nadd)
             noise = rng.normal(scale=scale_nadd)
 

@@ -11,3 +11,6 @@ class Component(metaclass=abc.ABCMeta):
 
     def log(self, loglvl: int, msg: str):
         self._log.log(loglvl, msg)
+
+    def plot(self, loglvl: int, fname: str, *plot_args, **plot_kwargs):
+        self._log.plot(loglvl, fname, *plot_args, **plot_kwargs)
