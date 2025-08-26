@@ -36,20 +36,37 @@ class CYCNone(Cycle):
     prefix = "[cycle-none]"
 
     def cycle(self):
-        source = np.array([self._mult], dtype=np.float64)
-        latsource = np.array([self._mult], dtype=np.float64)
-        #source = np.array([self._mult, self._mult], dtype=np.float64)
-        #latsource = np.array([self._mult, self._mult], dtype=np.float64)
+        source = np.array([0.0], dtype=np.float64)
+        latsource = np.array([90.0], dtype=np.float64)
         return source, latsource
 
 
 class CYC3(CYCNone):
+    """
+    Component for emerging no regions at all.
+    """
 
     prefix = "[cycle-3]"
     ...
 
 
+class CYC0(Cycle):
+    """
+    Component for fixed-strength cycle independent of time.
+    """
+
+    prefix = "[cycle-0]"
+
+    def cycle(self):
+        source = np.array([self._mult], dtype=np.float64)
+        latsource = np.array([self._lathi], dtype=np.float64)
+        return source, latsource
+
+
 class CYC1(Cycle):
+    """
+    Component for fixed-amplitude cycle
+    """
 
     prefix = "[cycle-1]"
 

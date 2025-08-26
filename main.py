@@ -9,10 +9,10 @@ from typing import Callable
 from plot import plot_syn, plot_lat, plot_hist, anim_syn
 
 from sftpy.collide import COLNone, COL1, COL2, COL3
-from sftpy.cycle import CYCNone, CYC1, CYC2, CYC3, CYC4
+from sftpy.cycle import CYCNone, CYC0, CYC1, CYC2, CYC3, CYC4
 from sftpy.decay import Decay
 from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
-from sftpy.emerge import BMRSchrijver
+from sftpy.emerge import BMRNone, BMRSchrijver
 from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
 from sftpy.rwalk import RWNone, RW0, RW1, RW2
 
@@ -42,10 +42,10 @@ def init_sim() -> dict:
 
     params = Params(
         #dt=86400,   # 24 hrs
-        #dt=21600,   # 6 hrs
-        dt=3600*3,   # 1 hr
-        nstep=30,
-        savestep=1,
+        dt=21600,   # 6 hrs
+        #dt=3600,   # 1 hr
+        nstep=1000,
+        savestep=10,
         seed=0x2025,
         nflux=2,
         nfluxmax=250000,
@@ -76,7 +76,7 @@ def init_sim() -> dict:
     theta[1] = np.pi *  73 / 180
     theta[:2] += rng.normal(scale=np.pi * 2 / 180, size=2)
 
-    init_flux = 100
+    init_flux = 6
 
     flux = np.zeros(params.nfluxmax, dtype=np.int64)
     flux[0] = init_flux * params.inv_pol
@@ -90,7 +90,6 @@ def init_sim() -> dict:
     params.nflux = nflux
     params.rng = rng
     
-    print("initial")
     plot_syn(phi, theta, flux, nflux, name="map-initial.png")
 
     return params
@@ -120,15 +119,15 @@ def loop(params: Params):
     time = Timestep(dt)
     pwrap = WrapPhi()
     twrap = WrapTheta()
-    cycle = CYCNone(time)
+    cycle = CYC0(time)
 
-    decay = Decay(dt, rng, t_decay=1000)
-    rwalk = RWNone(dt, rng)
-    mflow = MFNone(dt/2)
-    dflow1 = DFNone(dt/4)
-    dflow2 = DFNone(dt/2)
+    decay = Decay(dt, rng, t_decay=0.01)
+    rwalk = RW1(dt, rng)
+    mflow = MF1(dt/2)
+    dflow1 = DF1(dt/4)
+    dflow2 = DF1(dt/2)
     collide = COLNone(dt, rng, correction=correction)
-    bmr = BMRSchrijver(dt, rng, nfluxmax, loglvl=2)
+    bmr = BMRSchrijver(dt, rng, nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
     synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
@@ -168,6 +167,11 @@ def loop(params: Params):
         logger.log(2, f"flux {flux[:nflux]}")
         logger.log(2, f"theta {theta[:nflux]}")
         logger.log(2, f"phi {phi[:nflux]}")
+
+        # logger.plot(1, "imshow", synoptic.T)
+        if params.loglvl >= 1:
+            plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
+                     f"({time.time()/86400:.01f} d)")
 
 
     '''

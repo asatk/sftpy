@@ -17,7 +17,8 @@ def plot_hist(h: np.ndarray, phibins: int=360, thetabins: int=180):
 
 
 def plot_syn(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
-             phibins: int=360, thetabins: int=180, name: str=None):
+             phibins: int=360, thetabins: int=180, name: str=None,
+             save: bool=False):
     h, xe, ye = np.histogram2d(
             phi[:nflux], theta[:nflux], weights=flux[:nflux],
             bins=(phibins, thetabins), range=((0, 2*np.pi), (0, np.pi)))
@@ -40,7 +41,7 @@ def plot_syn(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
     #plt.scatter(ind[0], ind[1], marker="o", facecolors='none', color="orange")
     plt.title(name)
 
-    if name is not None:
+    if save:
         plt.savefig(name)
     plt.show()
 
@@ -61,7 +62,7 @@ def anim_syn(synoptic_all: np.ndarray, dt: float, phibins: int=360, thetabins: i
 
     figa, ax = plt.subplots(nrows=1, ncols=1)
 
-    im = ax.imshow(synoptic_all[0].T, cmap="gray", vmin=-6.0, vmax=6.0)
+    im = ax.imshow(synoptic_all[0].T, cmap="gray", vmin=-100.0, vmax=100.0)
     ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
     ax.set_xlabel(r"Azimuth $\phi$")
     ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])

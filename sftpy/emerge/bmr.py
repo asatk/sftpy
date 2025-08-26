@@ -1,3 +1,4 @@
+import abc
 import numpy as np
 
 from ..component import Component
@@ -17,7 +18,7 @@ joy_fold = 80.0     # Mx
 sjzero = 18.0       # deg
 
 max_lat = 25.0      # deg
-lat_width = 45.0    # deg
+lat_width = 25.0    # deg
 lat_fold = 500.0    # Mx
 
 turbulent = 0.7     # fraction of regions not w/ turbulent dynamo
@@ -27,7 +28,53 @@ avefluxd = 180.0    # G
 miniflux = 6        # Mx
 maxflux = 15000     # Mx
 
-class BMRSchrijver(Component):
+
+class BMREmerge(Component, metaclass=abc.ABCMeta):
+    """
+    Base class for Bipole Magnetic Region emergence.
+    """
+
+    prefix = "[bmr]"
+
+    def __init__(self,
+                 dt: float,
+                 rng: np.random.Generator,
+                 nfluxmax: int,
+                 loglvl: int=0):
+        super().__init__(loglvl)
+        self._dt = dt
+        self._rng = rng
+        self._nfluxmax = nfluxmax
+
+    @abc.abstractmethod
+    def emerge(self,
+               phi: np.ndarray,
+               theta: np.ndarray,
+               flux: np.ndarray,
+               nflux: int,
+               source,
+               latsource,
+               synoptic):
+        ...
+
+
+class BMRNone(BMREmerge):
+
+    def emerge(self,
+               phi: np.ndarray,
+               theta: np.ndarray,
+               flux: np.ndarray,
+               nflux: int,
+               source,
+               latsource,
+               synoptic):
+        return phi, theta, flux, nflux
+
+
+class BMRSchrijver(BMREmerge):
+    """
+    Component for BMR emergence according to CJS empirical recipes
+    """
 
     prefix = "[bmr-cjs]"
 
@@ -41,10 +88,7 @@ class BMRSchrijver(Component):
                  assimilation: bool=False,
                  gradual: bool=False,
                  loglvl: int=0):
-        super().__init__(loglvl)
-        self._dt = dt
-        self._rng = rng
-        self._nfluxmax = nfluxmax
+        super().__init__(dt, rng, nfluxmax, loglvl)
         self._specified = specified
         self._as_specified = as_specified
         self._initialize = initialize
@@ -102,23 +146,22 @@ class BMRSchrijver(Component):
             a *= np.fabs(source[i])
             p = psource
 
-            minpp = miniflux
 
-            minflux = minpp / binflux
+            minflux = miniflux / binflux
             scale = 1. / ((1.0 - p) * 1.5 ** (1.0 - p) * avefluxd ** (1.0 - p))
-            rangefactor = maxflux ** (1.0 - p) - (minpp * 2) ** (1.0 - p)
-            ntotal = 2 * a * dt / 86400 * scale * rangefactor
+            rangefactor = maxflux ** (1.0 - p) - (miniflux * 2) ** (1.0 - p)
+            ntotal1 = 2 * a * dt / 86400 * scale * rangefactor
 
-            frac = ntotal - int(ntotal)
-            ntotal = int(ntotal) + (rng.uniform() < frac)
+            frac = ntotal1 - int(ntotal1)
+            ntotal1 = int(ntotal1) + (rng.uniform() < frac)
 
-            newflux = self.new_bipole_fluxes(ntotal, p, binflux, minflux, maxflux, rng)
+            newflux1 = self.new_bipole_fluxes(ntotal1, p, binflux, minflux, maxflux, rng)
 
             a = 8.0
             a *= np.fabs(source[i])**(1.0/3) * turbulent + (1 - turbulent)
             p = psource + 1
             scale = 1. / ((1.0 - p) * 1.5 ** (1.0 - p) * avefluxd ** (1.0 - p))
-            rangefactor = maxflux ** (1.0 - p) - (minpp * 2) ** (1.0 - p)
+            rangefactor = maxflux ** (1.0 - p) - (miniflux * 2) ** (1.0 - p)
             ntotal2 = 2 * a * dt / 86400 * scale * rangefactor
 
             frac = ntotal2 - int(ntotal2)
@@ -126,14 +169,20 @@ class BMRSchrijver(Component):
 
             newflux2 = self.new_bipole_fluxes(ntotal2, p, binflux, minflux, maxflux, rng)
 
-            if len(newflux) == 0 and len(newflux2) == 0:
+            newflux = np.r_[newflux1, newflux2]
+            ntotal = len(newflux)
+        
+            if ntotal == 0:
                 continue
 
-            newflux = np.r_[newflux, newflux2]
-        
-            self.log(1, f"ntotal = {ntotal}   ntotal2 = {ntotal2}")
-            ntotal = len(newflux)
+            self.log(1, f"ntotal1 = {ntotal1}   ntotal2 = {ntotal2}   ntotal = {ntotal}")
             self.log(1, f"ntotal (all) = {ntotal}")
+            self.log(3, f"flux stats: mean {np.mean(newflux)}" + \
+                    f"   median {np.median(newflux)}   sd {np.std(newflux)}")
+            self.plot(3, "hist", newflux, bins=50)
+            self.plot(3, "xlim", (0.0, None))
+            self.plot(3, "title", "newflux")
+            self.plot(3, "show")
 
             # TODO -- this mode emerges nothing...
             # accelerated-time mode; leave out ephemeral regions
@@ -154,11 +203,19 @@ class BMRSchrijver(Component):
                 ntotal = len(newflux)
 
             # step 2 -- determine positions
+            self.log(1, f"latsource = {latsource[i]}")
             newphi = rng.uniform(high=2*np.pi, size=ntotal)
             newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
             width = lat_width * (np.exp(-newflux * binflux / lat_fold) + 0.15)
             newtheta += rng.normal(scale=width*np.pi/180, size=ntotal)
+            # introdued this myself just to prevent stuff from going oob
+            newtheta = np.clip(newtheta, a_min=-np.pi/2, a_max=np.pi/2)
             newtheta = np.pi/2 - newtheta
+
+            self.log(3, "new theta")
+            self.plot(3, "hist", newtheta, bins=25)
+            self.plot(3, "title", "concentration latitudes")
+            self.plot(3, "show")
 
             # nesting
             nesting = 1.5 * avefluxd * 1.47562 / 2 / binflux
@@ -169,10 +226,11 @@ class BMRSchrijver(Component):
                 npick = np.sum(ind_pick)
 
                 if npick > 0:
-                    self.log(2, f"nnest={nnest} npick={npick}")
+                    ind_nest_picks = ind_nest[ind_pick]
+                    self.log(2, f"nnest={nnest}   npick={npick}")
                     self.log(2, f"ind_nest {ind_nest}")
                     self.log(2, f"ind_pick {ind_pick}")
-                    ind_nest_picks = ind_nest[ind_pick]
+                    self.log(2, f"ind_nest_pick {ind_nest_picks}")
 
                     xx = np.zeros(180, dtype=np.byte)
                     xx[21:180-21] = 1
@@ -187,13 +245,14 @@ class BMRSchrijver(Component):
                         self.log(3, f"NEST nreplace = {nreplace}")
                         point = rng.choice(ind, replace=False, size=nreplace)
                         lat = point / 360
+
                         # TODO check the  +1 on these
                         self.log(3, f"NEST point = {point.shape}")
                         self.log(3, f"NEST lat = {lat.shape}")
                         self.log(3, f"NEST ind_nest_picks = {ind_nest_picks.shape}")
                         self.log(3, f"NEST new_phi = {newphi.shape}")
-                        newphi[ind_nest_picks[:nreplace]] = point - 360 * lat
-                        newtheta[ind_nest_picks[:nreplace]] = np.pi / 2 - np.arcsin(lat / 90 - 1)
+                        newphi[ind_nest_picks[:nreplace+1]] = point - 360 * lat
+                        newtheta[ind_nest_picks[:nreplace+1]] = np.pi / 2 - np.arcsin(lat / 90 - 1)
                     else:
                         self.log(3, "NEST no nests")
                         # goto nonests
@@ -214,10 +273,10 @@ class BMRSchrijver(Component):
                     b0 = 0.0
 
                 # TODO phithetaxyz
-                phithetaxyz(newphi+l0, newtheta, xe, ye, ze)
+                xe, ye, ze = phithetaxyz(newphi+l0, newtheta)
                 # TODO tiltmatrix
-                # TODO this two-hash mtx mult
-                pos = tiltmatrix(b0) ## [[xe], [ye], [ze]]
+                # TODO check this mtx mult w/ desired outcome from IDL
+                pos = tiltmatrix(b0) @ np.array([[xe], [ye], [ze]]).T
                 edge = np.sin(radassim * np.pi / 180)
                 ind = ((pos[:,1]**2 + pos[:,2]**2) < edge) and pos[:,0] > 0
                 if np.any(ind):
@@ -232,17 +291,22 @@ class BMRSchrijver(Component):
             # step 3 -- orientation of bipole axes
             width = joy_width * np.exp(-binflux * newflux / joy_fold) + sjzero
             orient = rng.normal(loc=joy, scale=width, size=ntotal) * np.pi / 180
-            itheta = newtheta > np.pi / 2
-            if np.any(itheta):
-                orient[itheta] = np.pi - orient[itheta]
-
+            orient[newtheta > np.pi / 2] = np.pi - orient[newtheta > np.pi / 2]
             orient += (source[i] < 0) * np.pi
 
+            self.log(1, f"joy = {joy}   joy_width = {joy_width}    joy_fold {joy_fold}")
+            self.plot(3, "hist", orient, bins=15)
+            self.plot(3, "title", "Orient")
+            self.plot(3, "show")
 
             # SPECIFIED SOURCES
 
             # step 4 -- position concentrations
             r = (np.sqrt(binflux * newflux * 1.e18 / avefluxd / np.pi) + 7.e8) / 7.e10
+            self.log(3, "separation")
+            self.plot(3, "hist", r)
+            self.plot(3, "title", "Separation r")
+            self.plot(3, "show")
             sep = np.clip(r, a_min=9000./7.e5/2, a_max=None)
             percon = np.astype(np.clip(newflux / 3., a_min=1, a_max=None), 
                                np.int64)
@@ -298,23 +362,45 @@ class BMRSchrijver(Component):
             y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
             z = costheta - xo * sintheta
 
+            if self._log._level >= 3:
+                from matplotlib import pyplot as plt
+                fig = plt.figure()
+                ax = fig.add_subplot(projection="3d")
+                #oct1 = (x > 0.0) & (y > 0.0) & (z > 0.0)
+                #oct1 = (x > 0.0) & (y > 0.0) & (z > 0.0)
+                ax.scatter(x, y, z, s=5)
+                #ax.scatter(x[oct1], y[oct1], z[oct1])
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
+                ax.set_zlabel("z")
+                plt.show()
+
             aphi = np.fmod(np.arctan2(y, x) + 2 * np.pi, 2 * np.pi)
             atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
 
-            self.log(1, f"aphi {aphi.shape}")
-            self.log(1, f"atheta {atheta.shape}")
-            self.log(1, f"mean atheta {np.mean(atheta)} std atheta "
+            self.log(5, f"aphi {aphi.shape}")
+            self.log(5, f"atheta {atheta.shape}")
+            self.log(5, f"mean atheta {np.mean(atheta)} std atheta "
                   f"{np.std(atheta)}")
 
-            self.plot(2, "hist", atheta, bins=20)
-            self.plot(2, "xticks", [0, np.pi/2, np.pi], ["0", r"$\pi/2$", r"$\pi$"])
-            self.plot(2, "xlim", (0, np.pi))
-            self.plot(2, "show")
+            self.log(3, "atheta hist")
+            self.plot(3, "hist", atheta, bins=150)
+            self.plot(3, "xticks", [0, np.pi/2, np.pi], ["0", r"$\pi/2$", r"$\pi$"])
+            self.plot(3, "xlim", (0, np.pi))
+            self.plot(3, "title", "added spot latitudes")
+            self.plot(3, "show")
 
+            self.log(3, "aphi hist")
+            self.plot(3, "hist", aphi, bins=150)
+            self.plot(3, "xticks", [0, np.pi, 2*np.pi], ["0", r"$\pi$", r"$2\pi$"])
+            self.plot(3, "xlim", (0, 2*np.pi))
+            self.plot(3, "title", "added spot longitudes")
+            self.plot(3, "show")
 
-
+            # TODO add Poisson noise CORRECTLY -- this caused the weird streak
             scale_nadd = np.sqrt(percon_nadd)
             noise = rng.normal(scale=scale_nadd)
+            noise = 0.0
 
             # TODO uhh confirm this funky index magic i made up
             aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
@@ -414,8 +500,6 @@ class BMRSchrijver(Component):
         if ntotal == 0:
             return newflux
 
-        self.log(3, f"NEWBMRFLUX p={p} minflux={minflux} maxflux={maxflux} binflux={binflux}")
-
         ep = 1 / (1.0 - p)
         bf2 = binflux * 2
         mbinflux = maxflux / binflux
@@ -423,12 +507,28 @@ class BMRSchrijver(Component):
         newvals = np.astype((p * rng.uniform(size=ntotal) ** ep + 0.5) / bf2,
                             np.int64)
 
-        notvalid = (newvals < minflux) & (newvals >= mbinflux)
+        notvalid = (newvals < minflux) | (newvals >= mbinflux)
+
+        self.log(5, newvals)
+        self.log(5, f"newvals stats: mean {np.mean(newvals)}" + \
+                f"   median {np.median(newvals)}   sd {np.std(newvals)}")
+        self.plot(5, "hist", newvals, bins=25)
+        self.plot(5, "title", "newvals")
+        self.plot(5, "show")
+
         while np.any(notvalid):
             nreplace = np.sum(notvalid)
             replacevals = np.astype((p * rng.uniform(size=nreplace) ** ep + 0.5) / bf2,
                                     np.int64)
             newvals[notvalid] = replacevals
-            notvalid = (newvals < minflux) & (newvals >= mbinflux)
+            notvalid = (newvals < minflux) | (newvals >= mbinflux)
+
+            self.log(4, f"nreplace {nreplace}")
+            self.log(5, newvals)
+            self.log(5, f"newvals stats: mean {np.mean(newvals)}" + \
+                    f"   median {np.median(newvals)}   sd {np.std(newvals)}")
+            self.plot(5, "hist", newvals, bins=25)
+            self.plot(5, "title", "newvals")
+            self.plot(5, "show")
 
         return newvals

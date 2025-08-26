@@ -130,12 +130,12 @@ class COL1(Collide):
                     (flux[i+1:] != 0))[0] + i+1
 
             ind2 = np.nonzero(
-                    (np.sum(np.abs(r[:,i] - r[:,ind1]), axis=0) < cr) & \
+                    (np.sum(np.abs(r[:,i,None] - r[:,ind1]), axis=0) < self._cr) & \
                     (flux[i+1:] != 0))[0] + i+1
 
             if ind2[0] >= i+1:
                 ind3 = np.nonzero(
-                        np.sum(np.square(r[:,i] - r[:,ind2]), axis=0) < self._critical)[0]
+                        np.sum(np.square(r[:,i,None] - r[:,ind2]), axis=0) < self._critical)[0]
                 if ind3[0] >= 0:
                     flux[i] += np.sum(flux[ind2[ind3]])
                     flux[ind2[ind3]] = 0    # eliminate collided particle(s)
