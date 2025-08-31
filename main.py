@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from typing import Callable
 
-from plot import plot_syn, plot_lat, plot_hist, anim_syn
+from plot import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux
 
 from sftpy.collide import COLNone, COL1, COL2, COL3
 from sftpy.cycle import CYCNone, CYC0, CYC1, CYC2, CYC3, CYC4
@@ -44,12 +44,12 @@ def init_sim() -> dict:
         #dt=86400,   # 24 hrs
         dt=21600,   # 6 hrs
         #dt=3600,   # 1 hr
-        nstep=1000,
+        nstep=10000,
         savestep=10,
         seed=0x2025,
         nflux=2,
         nfluxmax=250000,
-        t_decay=1,
+        t_decay=1000,
         inv_pol=1,
         source=1.0,
         phibins=360,
@@ -90,7 +90,7 @@ def init_sim() -> dict:
     params.nflux = nflux
     params.rng = rng
     
-    plot_syn(phi, theta, flux, nflux, name="map-initial.png")
+    plot_syn(phi, theta, flux, nflux, name="Initial Stellar Surface")
 
     return params
 
@@ -116,17 +116,17 @@ def loop(params: Params):
     logger = Logger(params.loglvl, "[loop]")
 
     # define computation components
-    time = Timestep(dt)
+    time = Timestep(dt, timer=params.savestep)
     pwrap = WrapPhi()
     twrap = WrapTheta()
-    cycle = CYC0(time)
+    cycle = CYC1(time)
 
     decay = Decay(dt, rng, t_decay=0.01)
-    rwalk = RW1(dt, rng)
-    mflow = MF1(dt/2)
-    dflow1 = DF1(dt/4)
-    dflow2 = DF1(dt/2)
-    collide = COLNone(dt, rng, correction=correction)
+    rwalk = RW2(dt, rng)
+    mflow = MF2(dt/2)
+    dflow1 = DF2(dt/4)
+    dflow2 = DF2(dt/2)
+    collide = COL1(dt, rng, correction=correction, loglvl=0)
     bmr = BMRSchrijver(dt, rng, nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
@@ -139,7 +139,7 @@ def loop(params: Params):
     for i in range(1, nstep):
 
         time.step()
-        logger.log(0, f"[{i:d}] time {time:.02e}")
+        logger.log(1, f"[{i:^{8}d}] t = {time/86400/365:.02e} yr")
 
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
@@ -151,7 +151,7 @@ def loop(params: Params):
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
-        nflux = collide.collide(phi, theta, flux, nflux)
+        #nflux = collide.collide(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
         source_str *= params.inv_pol * 2 - 1
@@ -163,7 +163,7 @@ def loop(params: Params):
             synoptic_all[i//savestep] = synoptic_save
 
 
-        logger.log(0, f"nflux {nflux}")
+        logger.log(2, f"nflux {nflux}")
         logger.log(2, f"flux {flux[:nflux]}")
         logger.log(2, f"theta {theta[:nflux]}")
         logger.log(2, f"phi {phi[:nflux]}")
@@ -171,7 +171,7 @@ def loop(params: Params):
         # logger.plot(1, "imshow", synoptic.T)
         if params.loglvl >= 1:
             plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
-                     f"({time.time()/86400:.01f} d)")
+                     f"({time.time()/86400:.01f} d)", show=True)
 
 
     '''
@@ -252,7 +252,9 @@ def loop(params: Params):
 
     # finish
 
-    plot_syn(phi, theta, flux, nflux, name="map-final.png")
+    time.readtimer("Simulation finished in")
+
+    plot_syn(phi, theta, flux, nflux, name="Final Stellar Surface", show=True)
 
     return synoptic_all
 
@@ -264,5 +266,5 @@ if __name__ == "__main__":
     params = init_sim()
     synoptic_all = loop(params)
     np.save(outfile, synoptic_all)
-    anim_syn(synoptic_all, params.dt*params.savestep)
-    plt.show()
+    plot_aflux(synoptic_all, params.dt*params.savestep, show=True)
+    anim_syn(synoptic_all, params.dt*params.savestep, flux_thresh=100, show=True)

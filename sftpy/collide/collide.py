@@ -56,7 +56,7 @@ class Collide(Component, metaclass=abc.ABCMeta):
         y = sintheta * np.sin(phi[:nflux])
         z = np.cos(theta[:nflux])
         r = np.stack([x, y, z])
-        rb = np.trunc((r + 1) * 128)
+        rb = np.trunc((r + 1) * 128).astype(np.byte)
 
         return r, rb
 
@@ -120,32 +120,44 @@ class COL1(Collide):
 
         # TODO vectorize
         for i in range(nflux-1):
+            
+            self.log(1, f"spot {i}")
 
             # skip empty flux concentration
             if flux[i] == 0:
                 continue
 
-            ind1 = np.nonzero(
-                    (np.sign(flux[i]) != np.sign(flux[i+1:])) & \
-                    (flux[i+1:] != 0))[0] + i+1
+            ind1 = np.sign(flux[i]) + np.sign(flux[i+1:nflux]) == 0
+            ind1 = np.nonzero(ind1)[0] + i + 1
 
+            ind2 = np.sum(np.abs(r[:,i,None] - r[:,ind1]), axis=0) < self._cr
+            ind2 = np.nonzero(ind2)[0] + i + 1
+
+            """
+            ind1 = np.nonzero(
+                    (np.sign(flux[i]) != np.sign(flux[i+1:nflux])) & \
+                    (flux[i+1:nflux] != 0))[0] + i+1
+
+            # TODO switch order of dims for r/rb
             ind2 = np.nonzero(
                     (np.sum(np.abs(r[:,i,None] - r[:,ind1]), axis=0) < self._cr) & \
-                    (flux[i+1:] != 0))[0] + i+1
+                    (flux[i+1:nflux] != 0))[0] + i+1
+            """
 
-            if ind2[0] >= i+1:
+            if np.any(ind2):
                 ind3 = np.nonzero(
                         np.sum(np.square(r[:,i,None] - r[:,ind2]), axis=0) < self._critical)[0]
-                if ind3[0] >= 0:
+
+                if np.any(ind3):
                     flux[i] += np.sum(flux[ind2[ind3]])
                     flux[ind2[ind3]] = 0    # eliminate collided particle(s)
 
                     # TODO there are some -1s in the IDL... compare code snippets
-                    ic = rng.choice(ind3)
+                    ic = self._rng.choice(ind3)
                     # TODO check this is just a not empty condition
                     if ic > 0:
-                        phi[i] = phi[index[ic]]
-                        theta[i] = theta[index[ic]]
+                        phi[i] = phi[ind2[ic]]
+                        theta[i] = theta[ind2[ic]]
 
         return self._collide_finish(phi, theta, flux, nflux)
 
@@ -204,7 +216,7 @@ class COL2(Collide):
             if n > 1:
                 flux[ind2[ind2 != i]] = 0
 
-                ic = rng.choice(ind2)
+                ic = self._rng.choice(ind2)
                 phi[i] = phi[ic]
                 theta[i] = theta[ic]
 
@@ -230,7 +242,7 @@ class COL3(Collide):
         # TODO but this isnt nflux?
         #order = np.zeros(len(flux))
 
-        order = rng.permutation(np.arange(nflux, dtype=np.int64))
+        order = self._rng.permutation(np.arange(nflux, dtype=np.int64))
 
         for i in range(nflux-1):
             
@@ -280,7 +292,7 @@ class COL3(Collide):
                     n += 1
 
             # TODO rng.choice? what is index (wht is length)
-            ic = rng.integers(n)
+            ic = self._rng.integers(n)
             ic = index[ic]
 
             for j in range(n):
