@@ -2,11 +2,7 @@
 Model driver
 """
 
-from matplotlib import pyplot as plt
 import numpy as np
-from typing import Callable
-
-from plot import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux
 
 from sftpy.collide import COLNone, COL1, COL2, COL3
 from sftpy.cycle import CYCNone, CYC0, CYC1, CYC2, CYC3, CYC4
@@ -16,8 +12,9 @@ from sftpy.emerge import BMRNone, BMRSchrijver
 from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
 from sftpy.rwalk import RWNone, RW0, RW1, RW2
 
-from sftpy.util import Logger, synoptic_map, Timestep
 from sftpy.misc import WrapPhi, WrapTheta
+from sftpy.util import Logger, synoptic_map, Timestep
+from sftpy.viz import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux
 
 class Params(dict):
     

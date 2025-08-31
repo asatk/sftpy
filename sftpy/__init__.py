@@ -10,6 +10,7 @@ from . import mflow
 from . import misc
 from . import rwalk
 from . import util
+from . import viz
 
 __all__ = [
         "nfluxmax",
@@ -23,6 +24,7 @@ __all__ = [
         "mflow",
         "misc",
         "rwalk",
-        "util"
+        "util",
+        "viz"
 ]
 
