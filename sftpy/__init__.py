@@ -6,6 +6,7 @@ from . import cycle
 from . import decay
 from . import dflow
 from . import emerge
+from . import fragment
 from . import mflow
 from . import misc
 from . import rwalk
@@ -21,6 +22,7 @@ __all__ = [
         "decay",
         "dflow",
         "emerge",
+        "fragment",
         "mflow",
         "misc",
         "rwalk",

@@ -9,6 +9,7 @@ from sftpy.cycle import CYCNone, CYC0, CYC1, CYC2, CYC3, CYC4
 from sftpy.decay import Decay
 from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
 from sftpy.emerge import BMRNone, BMRSchrijver
+from sftpy.fragment import Fragment
 from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
 from sftpy.rwalk import RWNone, RW0, RW1, RW2
 
@@ -41,8 +42,8 @@ def init_sim() -> dict:
         #dt=86400,   # 24 hrs
         dt=21600,   # 6 hrs
         #dt=3600,   # 1 hr
-        nstep=10000,
-        savestep=10,
+        nstep=100,
+        savestep=1,
         seed=0x2025,
         nflux=2,
         nfluxmax=250000,
@@ -57,9 +58,10 @@ def init_sim() -> dict:
         polarconverge=False,
         remhalf=False,
         correction=1.0,
+        fragdist=5000.0,
         ff=1.0,
         outfile="maps.npy",
-        loglvl=0)
+        loglvl=1)
 
     rng = np.random.default_rng(seed=params.seed)
 
@@ -117,13 +119,15 @@ def loop(params: Params):
     pwrap = WrapPhi()
     twrap = WrapTheta()
     cycle = CYC1(time)
+    rwalk_frag = RW0(dt, rng, diffusion=params.fragdist**2/4/dt, loglvl=0)
 
-    decay = Decay(dt, rng, t_decay=0.01)
+    decay = Decay(dt, rng, t_decay=params.t_decay)
     rwalk = RW2(dt, rng)
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL1(dt, rng, correction=correction, loglvl=0)
+    collide = COL1(dt, rng, correction=correction, loglvl=2)
+    fragment = Fragment(dt, rng, rwalk_frag, correction=correction, loglvl=0)
     bmr = BMRSchrijver(dt, rng, nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
@@ -148,7 +152,8 @@ def loop(params: Params):
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
-        #nflux = collide.collide(phi, theta, flux, nflux)
+        # nflux = collide.collide(phi, theta, flux, nflux)
+        nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
         source_str *= params.inv_pol * 2 - 1
@@ -160,13 +165,13 @@ def loop(params: Params):
             synoptic_all[i//savestep] = synoptic_save
 
 
-        logger.log(2, f"nflux {nflux}")
+        logger.log(1, f"nflux {nflux}")
         logger.log(2, f"flux {flux[:nflux]}")
         logger.log(2, f"theta {theta[:nflux]}")
         logger.log(2, f"phi {phi[:nflux]}")
 
         # logger.plot(1, "imshow", synoptic.T)
-        if params.loglvl >= 1:
+        if params.loglvl >= 2:
             plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
                      f"({time.time()/86400:.01f} d)", show=True)
 

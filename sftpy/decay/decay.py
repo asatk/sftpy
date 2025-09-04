@@ -24,7 +24,7 @@ class Decay(Component):
 
         # no decay if decay timescale is too large
         if t_decay > 999:
-            self.log(2, "extremely long decay time; decay ignored")
+            self.log(0, "long decay half-life: decay ignored")
             return None
 
 

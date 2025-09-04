@@ -27,7 +27,7 @@ class Timestep():
     def readtimer(self, msg):
         tcpu = datetime.now()
         dtcpu = tcpu - self._ticpu
-        print(f"[> {msg} {dtcpu.total_seconds():4f} s <]")
+        print(f"[> {msg} {dtcpu.total_seconds():3f} s <]")
 
     def step(self):
         self._time += self._dt

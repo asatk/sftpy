@@ -31,13 +31,13 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
              theta: np.ndarray,
              flux: np.ndarray,
              nflux: int,
-             synoptic: np.ndarray,
+             synoptic: np.ndarray=None,
              source: float=1.0, # TODO is this "source" the cycle "source" or other
              difftest: np.ndarray=None):
         ...
 
     def _move_start(self,
-                    synoptic: np.ndarray,
+                    synoptic: np.ndarray=None,
                     source: float=1.0):
 
         # TODO is this "source" the cycle "source" or other
@@ -122,7 +122,7 @@ class RW0(RandomWalk):
              theta: np.ndarray,
              flux: np.ndarray,
              nflux: int,
-             synoptic: np.ndarray,
+             synoptic: np.ndarray=None,
              source: float=1.0,
              difftest: np.ndarray=None):
 
@@ -146,7 +146,7 @@ class RW1(RandomWalk):
              theta: np.ndarray,
              flux: np.ndarray,
              nflux: int,
-             synoptic: np.ndarray,
+             synoptic: np.ndarray=None,
              source: float=1.0,
              difftest: np.ndarray=None):
 
@@ -185,7 +185,7 @@ class RW2(RandomWalk):
              theta: np.ndarray,
              flux: np.ndarray,
              nflux: int,
-             synoptic: np.ndarray,
+             synoptic: np.ndarray=None,
              source: float=1.0,
              difftest: np.ndarray=None):
 
