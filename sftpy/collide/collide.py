@@ -30,7 +30,7 @@ class Collide(Component, metaclass=abc.ABCMeta):
         self._radius = 1400 / self.meanv * correction
 
         self._crphi = self._radius / 7e5
-        self._critical = self._crphi ** 2 # collision distance in units of stellar radius
+        self._critical = self._crphi ** 2 # collision distance in units of stellar radius squared
 
     def _collide_start(self,
                        phi: np.ndarray,
@@ -54,20 +54,18 @@ class Collide(Component, metaclass=abc.ABCMeta):
                         nflux: int):
 
         nfluxold = nflux
-        index = np.nonzero(flux[:nflux] != 0)[0]
+        index = np.nonzero(flux[:nflux])[0]
         nnew = len(index)
         if nflux == nnew:
             return nflux
 
         self.log(2, f"[collide finish] ---- nnew {nnew}/{nflux}")
-        self.log(2, f"[collide finish] ---- index {index}")
 
-        nflux = nnew
         phi[:nnew] = phi[index]
-        phi[:nnew] = theta[index]
+        theta[:nnew] = theta[index]
         flux[:nnew] = flux[index]
 
-        return nflux
+        return nnew
 
     @abc.abstractmethod
     def collide(self,
@@ -105,85 +103,38 @@ class COL1(Collide):
             return nflux
 
         r = self._collide_start(phi, theta, flux, nflux)
-        
-        # spots of opposite-signed flux that can "collide"
-        signs = np.add.outer(np.sign(flux[:nflux]), np.sign(flux[:nflux]))
-        ind_opp = signs == 0
 
-        # determine distances between spots
-        dists = np.sqrt(np.sum(np.square(np.apply_along_axis(
-            lambda arr: np.subtract.outer(arr, arr), 0, r)), axis=2))
-        ind_close = dists < self._critical
+        # determine pos/neg concentrations
+        indp = np.nonzero(np.sign(flux[:nflux]) == +1)[0]
+        indn = np.nonzero(np.sign(flux[:nflux]) == -1)[0]
 
-        # exclude connection to self
-        ind_self = ~(np.eye(nflux) == 1)
+        self.log(1, f"npos {len(indp)} / {nflux}   nneg {len(indn)} / {nflux}")
 
-        # spots that collide have opposite-polarity fluxes and are nearby
-        ind_col = ind_opp & ind_close & ind_self
+        rn = r[indn]
+        fluxn = flux[indn]
 
-        # locate concentrations that can collide (have opposite-pol neighbors)
-        where_col = np.nonzero(np.any(ind_col, axis=1))[0]
+        # iterate through pos concentrations
+        for i in indp:
 
-        # coalesce spots until none remain
-        while len(where_col) > 0:
+            # determine neg neighbors to pos spot i
+            nbrs = np.sum(np.square(r[i] - rn), axis=1) < self._critical
 
-            # choose one spot to be the "hub" into which its neighbors coalesce
-            hub = rng.choice(where_col)
+            # shuffle list of spots to randomly determine one spot for all to
+            # coalesce into and the others for removal
+            spots = self._rng.permutation(np.r_[indn[nbrs], i])
 
-            # identify neighbors
-            nbrs = np.nonzero(ind_col[hub])[0]
+            # calculate total flux in collided spots
+            sumflux = np.sum(flux[spots])
 
-            # calculate total flux to be added to hub spot
-            hubflux = np.sum(flux[nbrs])
-            
-            # add coalesced flux to hub
-            flux[hub] += hubflux
+            # hub spot has combined flux
+            hubspot = spots[0]
 
-            # remove connections to coalesced spots
-            ind_col[nbrs] = False
-            ind_col[:,nbrs] = False     # could potentially remove w/ slick coding
+            # remaining spots to be deleted
+            restspots = spots[1:]
 
-            # zero out coalesced spots
-            flux[nbrs] = 0
+            flux[hubspot] = sumflux
+            flux[restspots] = 0
 
-            # locate concentrations that can collide after coalescing prev
-            where_col = np.nonzero(np.any(ind_col, axis=1))[0]
-
-
-
-        """
-
-        # determine connected components (linear)
-        # select a vertex (spots) from each c.c. (const)
-        # coalesce and remove concentrations
-        # tradeoff - compute c.c. every time but coalescing partitions graph
-        # anyway so fewer iters
-
-
-        # index spots with any neighbors
-        where = np.nonzero(np.any(ind_col, axis=1))[0]
-
-        # pick coalesce conc by random or by one with most connections?
-        # hueristic choice? or by random but include all connections so change
-        # where to be the 2d ind and only select first ind?
-        choice = rng.choice(where)
-
-        # flux at each concentration if all neighbors coalesced there
-        fluxarr = np.repeat([flux], nflux, axis=0)
-        fluxcoal = np.sum(fluxarr, axis=1, where=ind_col[choice])
-
-        # TODO greedy set cover approximation?
-
-        # is there a non-seq way to do? something w/ CV/linalg?
-        # coalesce (must be done sequentially)
-        if np.any(ind_col):
-            for i in range(nflux):
-                if flux[i] == 0:
-                    continue
-
-        """
-
-        
 
         """
 

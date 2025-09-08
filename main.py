@@ -89,7 +89,7 @@ def init_sim() -> dict:
     params.nflux = nflux
     params.rng = rng
     
-    plot_syn(phi, theta, flux, nflux, name="Initial Stellar Surface")
+    plot_syn(phi, theta, flux, nflux, name="Initial Stellar Surface", show=True)
 
     return params
 
@@ -152,7 +152,7 @@ def loop(params: Params):
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
-        # nflux = collide.collide(phi, theta, flux, nflux)
+        nflux = collide.collide(phi, theta, flux, nflux)
         nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
@@ -166,9 +166,6 @@ def loop(params: Params):
 
 
         logger.log(1, f"nflux {nflux}")
-        logger.log(2, f"flux {flux[:nflux]}")
-        logger.log(2, f"theta {theta[:nflux]}")
-        logger.log(2, f"phi {phi[:nflux]}")
 
         # logger.plot(1, "imshow", synoptic.T)
         if params.loglvl >= 2:
@@ -269,4 +266,5 @@ if __name__ == "__main__":
     synoptic_all = loop(params)
     np.save(outfile, synoptic_all)
     plot_aflux(synoptic_all, params.dt*params.savestep, show=True)
-    anim_syn(synoptic_all, params.dt*params.savestep, flux_thresh=100, show=True)
+    anim_syn(synoptic_all, params.dt*params.savestep, flux_thresh=100,
+             show=True, ms=500)

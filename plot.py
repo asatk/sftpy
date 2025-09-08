@@ -10,4 +10,4 @@ if __name__ == "__main__":
     dt = 21600 * 10
 
     plot_aflux(data, dt, show=True)
-    anim_syn(data, dt, show=True)
+    anim_syn(data, dt, show=True, ms=100)
