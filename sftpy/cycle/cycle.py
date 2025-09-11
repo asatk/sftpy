@@ -72,7 +72,7 @@ class CYC1(Cycle):
 
     def cycle(self):
 
-        time = self._timestep.time()
+        time = self._timestep.gettime()
 
         a = np.full(2, 2 * np.pi / (self._pd + 2 * self._ovr), dtype=np.float64)
         a[0] *= np.mod(time + self._pd, self._pd)
@@ -111,7 +111,7 @@ class CYC2(Cycle):
 
     def cycle(self):
 
-        time = self._timestep.time()
+        time = self._timestep.gettime()
 
         a = np.full(2, 2 * np.pi / (self._pd + 2 * self._ovr), dtype=np.float64)
         a[0] *= np.mod(time + self._pd, self._pd)
@@ -160,7 +160,7 @@ class CYC4(Cycle):
     # matchsolarrecords
     def cycle(self):
 
-        time = self._timestep.time()
+        time = self._timestep.gettime()
         minima = CYC4.minima
     
 

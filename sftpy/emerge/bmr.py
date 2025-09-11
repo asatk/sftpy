@@ -237,7 +237,7 @@ class BMRSchrijver(BMREmerge):
                     yy = np.ones(360, dtype=np.byte)
                     # TODO check this matmult
                     # ind = (synoptic * np.outer(yy, xx)) != 0
-                    ind = np.nonzero(np.ravel((synoptic * np.outer(yy, xx))) != 0)[0]
+                    ind = np.nonzero(np.ravel((synoptic * np.outer(yy, xx))))[0]
                     nind = len(ind)
 
                     if nind > 0:

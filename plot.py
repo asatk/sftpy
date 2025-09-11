@@ -7,7 +7,7 @@ if __name__ == "__main__":
     data = np.load(fname)
     nflux = data.shape[0]
 
-    dt = 21600 * 10
+    dt = 21600 * 4 * 6
 
     plot_aflux(data, dt, show=True)
-    anim_syn(data, dt, show=True, ms=100)
+    anim_syn(data, dt, show=True, ms=100, flux_thresh=30)

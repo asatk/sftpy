@@ -25,24 +25,17 @@ class Params(dict):
     def __setattr__(self, key, value):
         self[key] = value
 
-class Driver():
-
-    def __init__(self, comps: list):
-        self._comps = comps
-
-    def loop(self):
-        for i in range(nstep):
-            for comp in self._comps:
-                self._comps
+    def to_json(self):
+        ...
 
 
 def init_sim() -> dict:
 
     params = Params(
-        #dt=86400,   # 24 hrs
-        dt=21600,   # 6 hrs
+        dt=86400,   # 24 hrs
+        #dt=21600,   # 6 hrs
         #dt=3600,   # 1 hr
-        nstep=100,
+        nstep=10,
         savestep=1,
         seed=0x2025,
         nflux=2,
@@ -115,7 +108,7 @@ def loop(params: Params):
     logger = Logger(params.loglvl, "[loop]")
 
     # define computation components
-    time = Timestep(dt, timer=params.savestep)
+    time = Timestep(dt)
     pwrap = WrapPhi()
     twrap = WrapTheta()
     cycle = CYC1(time)
@@ -137,10 +130,12 @@ def loop(params: Params):
     synoptic_save = synoptic_map(phi, theta, flux, nflux)
     synoptic_all[0] = synoptic_save
 
+    logger.clockstart(0, "Simulation begins:")
+
     for i in range(1, nstep):
 
         time.step()
-        logger.log(1, f"[{i:^{8}d}] t = {time/86400/365:.02e} yr")
+        logger.log(1, f"[{i:^{8}d}] t = {time/86400/365:.02g} yr")
 
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
@@ -152,7 +147,9 @@ def loop(params: Params):
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
+        logger.clockstart("col")
         nflux = collide.collide(phi, theta, flux, nflux)
+        logger.clockstop("col", "collide: ")
         nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
@@ -170,7 +167,7 @@ def loop(params: Params):
         # logger.plot(1, "imshow", synoptic.T)
         if params.loglvl >= 2:
             plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
-                     f"({time.time()/86400:.01f} d)", show=True)
+                     f"({time/86400:.01f} d)", show=True)
 
 
     '''
@@ -250,8 +247,8 @@ def loop(params: Params):
     '''
 
     # finish
-
-    time.readtimer("Simulation finished in")
+    logger.clockstop(0, "Simulation completed in ")
+    logger.clockstart(0, "Simulation finished: ")
 
     plot_syn(phi, theta, flux, nflux, name="Final Stellar Surface", show=True)
 

@@ -90,6 +90,18 @@ class COLNone(Collide):
         r = self._collide_start(phi, theta, flux, nflux)
         return self._collide_finish(phi, theta, flux, nflux)
 
+class COLBin(Collide):
+    """
+    Collide by binning spots into a grid and colliding within cells.
+    """
+
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
+        ...
+
 
 class COL1(Collide):
 
@@ -279,7 +291,7 @@ class COL3(Collide):
                 lo = 0
 
             while (theta[lo] > thetalo and low > 0):
-                lo = lo - range
+                lo = lo - 25
                 if lo < 0:
                     lo = 0
 
