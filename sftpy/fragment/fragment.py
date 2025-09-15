@@ -1,15 +1,23 @@
 import numpy as np
 
+from sftpy import simrc as rc
+from sftpy import rng
+
 from ..component import Component
-from ..constants import binflux
+
+dt = rc["general.dt"]
+fragment = rc["fragment.fragment"]
+correction = rc["fragment.correction"]
+loglvl = rc["component.loglvl"]
+binflux = rc["physics.binflux"]
+
 
 class Fragment(Component):
 
-    def __init__(self, dt, rng, rwalk, fragment: float=1.0,
-                 correction: float=1.0, loglvl: int=0):
+    def __init__(self, rwalk, dt: float=dt, fragment: float=fragment,
+                 correction: float=correction, loglvl: int=loglvl):
         super().__init__(loglvl=loglvl)
         self._dt = dt
-        self._rng = rng
         self._k0 = 0.4e-6 * binflux * fragment * correction
 
     def fragment(self, phi, theta, flux, nflux):
@@ -21,14 +29,14 @@ class Fragment(Component):
                 self._dt
 
         # bernoulli trial for each spot's breakup
-        frag = np.nonzero(self._rng.uniform(size=nflux) < prob)[0]
+        frag = np.nonzero(rng.uniform(size=nflux) < prob)[0]
         nfrag = len(frag)
 
         if nfrag:
             return nflux
 
         # fraction of flux fragmented
-        frac = np.astype(self._rng.uniform(high=0.5, size=nfrag)*flux[frag], np.int64)
+        frac = np.astype(rng.uniform(high=0.5, size=nfrag)*flux[frag], np.int64)
 
         # don't fragment fractions of 0 or 1
         ind = (frac != 0) & (flux[frag] != frac)

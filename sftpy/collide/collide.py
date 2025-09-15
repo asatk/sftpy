@@ -1,33 +1,42 @@
 import abc
 import numpy as np
 
+from sftpy import simrc as rc
+from sftpy import rng
+
 from ..component import Component
+
+dt = rc["general.dt"]
+correction = rc["collide.correction"]
+meanv = rc["collide.meanv"]
+diffusion = rc["physics.diffusion"]
+loglvl = rc["component.loglvl"]
+
 
 class Collide(Component, metaclass=abc.ABCMeta):
     """
     Base class for flux concentration collision component of computation sequence.
     """
 
-    meanv: float = 1 / 3    # estimate of mean velocity
     prefix = "[collide]"
 
     def __init__(self,
-                 dt: float,
-                 rng: np.random.Generator,
-                 correction: float=1.0,
-                 diffusion: float=300.0,    # TODO check if diff is in IDL code
+                 dt: float=dt,
+                 correction: float=correction,
+                 meanv: float=meanv,
+                 diffusion: float=diffusion,    # TODO check if diff is in IDL code
                  trackcancel: bool=False,
-                 loglvl: int=0):
+                 loglvl: int=loglvl):
+
         super().__init__(loglvl)
         self._dt = dt
-        self._rng = rng
         self._corr = correction
         # TODO same constant as in charges/charges
         self._difu = diffusion
         self._track = trackcancel
 
         # collision param from schrijver+ 1997 l=1400km^2/s
-        self._radius = 1400 / self.meanv * correction
+        self._radius = 1400 / meanv * correction
 
         self._crphi = self._radius / 7e5
         self._critical = self._crphi ** 2 # collision distance in units of stellar radius squared
@@ -90,9 +99,9 @@ class COLNone(Collide):
         r = self._collide_start(phi, theta, flux, nflux)
         return self._collide_finish(phi, theta, flux, nflux)
 
-class COLBin(Collide):
+class COLScan(Collide):
     """
-    Collide by binning spots into a grid and colliding within cells.
+    Collide by scanning over phi
     """
 
     def collide(self,
@@ -100,7 +109,71 @@ class COLBin(Collide):
                 theta: np.ndarray,
                 flux: np.ndarray,
                 nflux: int):
-        ...
+
+
+        # permutation of indices based on value of phi
+        perm = np.argsort(phi[:nflux])
+        psort = phi[perm]
+        tsort = theta[perm]
+        fsort = flux[perm]
+
+        r = self._collide_start(psort, tsort, fsort, nflux)
+
+        # tunable param: size of 2D arrays for computation. choose btwn 1k-10k
+        n = 1000
+
+
+        minphi = 0.0
+        maxphi = phi[:n]
+
+        lo = 0
+        hi = n
+
+        while hi < nflux:
+
+            # spots of opposite-signed flux that can "collide"
+            signs = np.add.outer(np.sign(fsort[lo:hi]), np.sign(fsort[lo:hi]))
+            ind_opp = signs == 0
+
+            # determine distances between spots
+            dists = np.sqrt(np.sum(np.square(np.apply_along_axis(
+                lambda arr: np.subtract.outer(arr, arr), 0, r)), axis=2))
+            ind_close = dists < self._critical
+
+            # exclude connection to self
+            ind_self = ~(np.eye(hi-lo) == 1)
+
+            # spots that collide have opposite-polarity fluxes and are nearby
+            ind_col = ind_opp & ind_close & ind_self
+
+            # locate concentrations that can collide (have opposite-pol neighbors)
+            where_col = np.nonzero(np.any(ind_col, axis=1))[0]
+
+            # coalesce spots until none remain
+            while len(where_col) > 0:
+
+                # choose one spot to be the "hub" into which its neighbors coalesce
+                hub = rng.choice(where_col)
+
+                # identify neighbors
+                nbrs = np.nonzero(ind_col[hub])[0]
+
+                # calculate total flux to be added to hub spot
+                hubflux = np.sum(fsort[nbrs])
+                
+                # add coalesced flux to hub
+                fsort[hub] += hubflux
+
+                # remove connections to coalesced spots
+                ind_col[nbrs] = False
+                ind_col[:,nbrs] = False     # could potentially remove w/ slick coding
+
+                # zero out coalesced spots
+                fsort[nbrs] = 0
+
+                # locate concentrations that can collide after coalescing prev
+                where_col = np.nonzero(np.any(ind_col, axis=1))[0]
+            ...
 
 
 class COL1(Collide):
@@ -133,7 +206,7 @@ class COL1(Collide):
 
             # shuffle list of spots to randomly determine one spot for all to
             # coalesce into and the others for removal
-            spots = self._rng.permutation(np.r_[indn[nbrs], i])
+            spots = rng.permutation(np.r_[indn[nbrs], i])
 
             # calculate total flux in collided spots
             sumflux = np.sum(flux[spots])
@@ -185,7 +258,7 @@ class COL1(Collide):
                     flux[ind2[ind3]] = 0    # eliminate collided particle(s)
 
                     # TODO there are some -1s in the IDL... compare code snippets
-                    ic = self._rng.choice(ind3)
+                    ic = rng.choice(ind3)
                     # TODO check this is just a not empty condition
                     if ic > 0:
                         phi[i] = phi[ind2[ic]]
@@ -250,7 +323,7 @@ class COL2(Collide):
             if n > 1:
                 flux[ind2[ind2 != i]] = 0
 
-                ic = self._rng.choice(ind2)
+                ic = rng.choice(ind2)
                 phi[i] = phi[ic]
                 theta[i] = theta[ic]
 
@@ -276,7 +349,7 @@ class COL3(Collide):
         # TODO but this isnt nflux?
         #order = np.zeros(len(flux))
 
-        order = self._rng.permutation(np.arange(nflux, dtype=np.int64))
+        order = rng.permutation(np.arange(nflux, dtype=np.int64))
 
         for i in range(nflux-1):
             
@@ -326,7 +399,7 @@ class COL3(Collide):
                     n += 1
 
             # TODO rng.choice? what is index (wht is length)
-            ic = self._rng.integers(n)
+            ic = rng.integers(n)
             ic = index[ic]
 
             for j in range(n):

@@ -4,12 +4,15 @@ Model driver
 
 import numpy as np
 
+from sftpy import simrc as rc
+
 from sftpy.collide import COLNone, COL1, COL2, COL3
 from sftpy.cycle import CYCNone, CYC0, CYC1, CYC2, CYC3, CYC4
 from sftpy.decay import Decay
 from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
 from sftpy.emerge import BMRNone, BMRSchrijver
 from sftpy.fragment import Fragment
+from sftpy.initialize import InitSimple
 from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
 from sftpy.rwalk import RWNone, RW0, RW1, RW2
 
@@ -17,125 +20,58 @@ from sftpy.misc import WrapPhi, WrapTheta
 from sftpy.util import Logger, synoptic_map, Timestep
 from sftpy.viz import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux
 
-class Params(dict):
-    
-    def __getattr__(self, key):
-        return self[key]
 
-    def __setattr__(self, key, value):
-        self[key] = value
+def loop():
 
-    def to_json(self):
-        ...
+    loglvl = rc["general.loglvl"]
+    dt = rc["general.dt"]
+    savestep = rc["general.savestep"]
+    nstep = rc["general.nstep"]
+    fragdist = rc["fragment.fragdist"]
 
+    # this is not const in the sim -- make local once loaded into mem
+    inv_pol = rc["cycle.inv_pol"]
 
-def init_sim() -> dict:
-
-    params = Params(
-        dt=86400,   # 24 hrs
-        #dt=21600,   # 6 hrs
-        #dt=3600,   # 1 hr
-        nstep=10,
-        savestep=1,
-        seed=0x2025,
-        nflux=2,
-        nfluxmax=250000,
-        t_decay=1000,
-        inv_pol=1,
-        source=1.0,
-        phibins=360,
-        thetabins=180,
-        savelat=False,
-        nstepfullres=1000000,
-        as_specified=True,
-        polarconverge=False,
-        remhalf=False,
-        correction=1.0,
-        fragdist=5000.0,
-        ff=1.0,
-        outfile="maps.npy",
-        loglvl=1)
-
-    rng = np.random.default_rng(seed=params.seed)
-
-    phi = np.zeros(params.nfluxmax, dtype=np.float64)
-    phi[0] = np.pi * 20 / 180
-    phi[1] = np.pi * 20 / 180
-    phi[:2] += rng.normal(scale=np.pi * 2 / 180, size=2)
-
-    theta = np.zeros(params.nfluxmax, dtype=np.float64)
-    theta[0] = np.pi * 107 / 180
-    theta[1] = np.pi *  73 / 180
-    theta[:2] += rng.normal(scale=np.pi * 2 / 180, size=2)
-
-    init_flux = 6
-
-    flux = np.zeros(params.nfluxmax, dtype=np.int64)
-    flux[0] = init_flux * params.inv_pol
-    flux[1] = -init_flux * params.inv_pol
-
-    nflux = 2
-    
-    params.phi = phi
-    params.theta = theta
-    params.flux = flux
-    params.nflux = nflux
-    params.rng = rng
-    
-    plot_syn(phi, theta, flux, nflux, name="Initial Stellar Surface", show=True)
-
-    return params
-
-
-def loop(params: Params):
-
-    phi = params.phi
-    theta = params.theta
-    flux = params.flux
-    nflux = params.nflux
-    rng = params.rng
-
-    nstep = params.nstep
-    dt = params.dt
-    nfluxmax = params.nfluxmax
-    source = params.source
-    as_specified = params.as_specified
-    correction = params.correction
-    savestep = params.savestep
-    outfile = params.outfile
+    nfluxmax = rc["general.nfluxmax"]
+    # TODO confirm that this is same
+    source = rc["cycle.mult"]
 
     # logger
-    logger = Logger(params.loglvl, "[loop]")
+    logger = Logger(loglvl, "[loop]")
 
     # define computation components
-    time = Timestep(dt)
+    time = Timestep()
     pwrap = WrapPhi()
     twrap = WrapTheta()
     cycle = CYC1(time)
-    rwalk_frag = RW0(dt, rng, diffusion=params.fragdist**2/4/dt, loglvl=0)
+    rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
+    ini = InitSimple(nfluxmax)
 
-    decay = Decay(dt, rng, t_decay=params.t_decay)
-    rwalk = RW2(dt, rng)
+    decay = Decay()
+    rwalk = RW2(dt)
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL1(dt, rng, correction=correction, loglvl=2)
-    fragment = Fragment(dt, rng, rwalk_frag, correction=correction, loglvl=0)
-    bmr = BMRSchrijver(dt, rng, nfluxmax, loglvl=0)
+    collide = COL1(loglvl=2)
+    fragment = Fragment(rwalk_frag)
+    bmr = BMRSchrijver(nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
     synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
+
+    # initialize simulation
+    phi, theta, flux, nflux = ini.init()
 
     # save initial step
     synoptic_save = synoptic_map(phi, theta, flux, nflux)
     synoptic_all[0] = synoptic_save
 
-    logger.clockstart(0, "Simulation begins:")
-
+    logger.clockstart("sim", "Simulation begins:")
     for i in range(1, nstep):
 
         time.step()
-        logger.log(1, f"[{i:^{8}d}] t = {time/86400/365:.02g} yr")
+        logger.log(1, f"[{i}] t = {time/86400/365:.02g} yr")
+        logger.clockstart("iter")
 
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
@@ -153,9 +89,11 @@ def loop(params: Params):
         nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
-        source_str *= params.inv_pol * 2 - 1
+        source_str *= inv_pol * 2 - 1
 
+        logger.clockstart("emerge")
         phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux, source_str, latsource, synoptic)
+        logger.clockstop("emerge", "emerge: ")
 
         if i % savestep == 0:
             synoptic_save = synoptic_map(phi, theta, flux, nflux)
@@ -165,9 +103,11 @@ def loop(params: Params):
         logger.log(1, f"nflux {nflux}")
 
         # logger.plot(1, "imshow", synoptic.T)
-        if params.loglvl >= 2:
+        if loglvl >= 2:
             plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
                      f"({time/86400:.01f} d)", show=True)
+
+        logger.clockstop("iter", f"[{i}]")
 
 
     '''
@@ -247,8 +187,8 @@ def loop(params: Params):
     '''
 
     # finish
-    logger.clockstop(0, "Simulation completed in ")
-    logger.clockstart(0, "Simulation finished: ")
+    logger.clockstop("sim", "Simulation completed in ")
+    logger.clockstart("sim", "Simulation finished: ")
 
     plot_syn(phi, theta, flux, nflux, name="Final Stellar Surface", show=True)
 
@@ -257,11 +197,9 @@ def loop(params: Params):
         
 
 if __name__ == "__main__":
-    outfile = "maps.npy"
+    outfile = rc["general.outfile"]
 
-    params = init_sim()
-    synoptic_all = loop(params)
+    synoptic_all = loop()
     np.save(outfile, synoptic_all)
-    plot_aflux(synoptic_all, params.dt*params.savestep, show=True)
-    anim_syn(synoptic_all, params.dt*params.savestep, flux_thresh=100,
-             show=True, ms=500)
+    plot_aflux(synoptic_all, show=True)
+    anim_syn(synoptic_all, flux_thresh=100, ms=100, show=True)

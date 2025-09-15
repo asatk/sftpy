@@ -1,33 +1,35 @@
 import abc
 import numpy as np
 
+from sftpy import simrc as rc
+from sftpy import rng
+
 from ..component import Component
-from ..constants import binflux
 
-# TODO THIS MUST BE LINKED TO CONSTANT IN MAIN
-nfluxmax = 250000
 
+binflux= rc["physics.binflux"]
+nfluxmax = rc["general.nfluxmax"]
 # TODO change - just checking if cycle exists and what dir/sign?
-cyl_mult = 1.0
+cyl_mult = rc["cycle.mult"]
+dt = rc["general.dt"]
+loglvl = rc["general.loglvl"]
 
-# defaults from kit_iocontrol.pro
+# orientation
+joy = rc["schrijver.joy"]
+joy_width = rc["schrijver.joy_width"]
+joy_fold = rc["schrijver.joy_fold"]
+sjzero = rc["schrijver.sjzero"]
 
-joy = 7.0           # deg
-joy_width = 90.0    # deg
-joy_fold = 80.0     # Mx
-sjzero = 18.0       # deg
+max_lat = rc["schrijver.max_lat"]
+lat_width = rc["schrijver.lat_width"]
+lat_fold = rc["schrijver.lat_fold"]
 
-max_lat = 25.0      # deg
-lat_width = 25.0    # deg
-lat_fold = 500.0    # Mx
+turbulent = rc["schrijver.turbulent"]
+psource = rc["schrijver.psource"]
 
-turbulent = 0.7     # fraction of regions not w/ turbulent dynamo
-psource = 1.9       # power law index
-
-avefluxd = 180.0    # G
-miniflux = 6        # Mx
-maxflux = 15000     # Mx
-
+avefluxd = rc["schrijver.avefluxd"]
+miniflux = rc["schrijver.miniflux"]
+maxflux = rc["schrijver.maxflux"]
 
 class BMREmerge(Component, metaclass=abc.ABCMeta):
     """
@@ -37,13 +39,11 @@ class BMREmerge(Component, metaclass=abc.ABCMeta):
     prefix = "[bmr]"
 
     def __init__(self,
-                 dt: float,
-                 rng: np.random.Generator,
-                 nfluxmax: int,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 nfluxmax: int=nfluxmax,
+                 loglvl: int=loglvl):
         super().__init__(loglvl)
         self._dt = dt
-        self._rng = rng
         self._nfluxmax = nfluxmax
 
     @abc.abstractmethod
@@ -79,16 +79,15 @@ class BMRSchrijver(BMREmerge):
     prefix = "[bmr-cjs]"
 
     def __init__(self,
-                 dt: float,
-                 rng: np.random.Generator,
-                 nfluxmax: int,
+                 dt: float=dt,
+                 nfluxmax: int=nfluxmax,
                  specified=None,
                  as_specified: bool=True,
                  initialize: bool=False,
                  assimilation: bool=False,
                  gradual: bool=False,
-                 loglvl: int=0):
-        super().__init__(dt, rng, nfluxmax, loglvl)
+                 loglvl: int=loglvl):
+        super().__init__(dt, nfluxmax, loglvl)
         self._specified = specified
         self._as_specified = as_specified
         self._initialize = initialize
@@ -105,7 +104,6 @@ class BMRSchrijver(BMREmerge):
                synoptic: np.ndarray):
 
         dt = self._dt
-        rng = self._rng
         specified = self._specified
         as_specified = self._as_specified
         initialize = self._initialize

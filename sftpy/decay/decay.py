@@ -4,7 +4,14 @@ Decay field
 
 import numpy as np
 
+from sftpy import simrc as rc
+from sftpy import rng
+
 from ..component import Component
+
+dt = rc["general.dt"]
+t_decay = rc["decay.t_decay"]
+loglvl = rc["component.loglvl"]
 
 class Decay(Component):
     """
@@ -14,12 +21,10 @@ class Decay(Component):
     prefix = "[decay]"
 
     def __init__(self,
-                 dt: float,
-                 rng: np.random.Generator,
-                 t_decay: float,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 t_decay: float=t_decay,
+                 loglvl: int=loglvl):
         super().__init__(loglvl)
-        self._rng = rng
         self._factor = 1 - np.exp(-np.log(2) * dt / 365.25 / 86400 / t_decay)
 
         # no decay if decay timescale is too large
@@ -39,7 +44,7 @@ class Decay(Component):
 
         # fractional amt rounded up w/ random prob equal to fraction
         remainder = remove - np.int64(remove)
-        if self._rng.uniform() < remainder:
+        if rng.uniform() < remainder:
             remove += 1
 
         # integer number of flux concentrations to remove
@@ -60,8 +65,8 @@ class Decay(Component):
             return nflux
 
         # select `remove` number of positive and negative concentrations to decay
-        pos_decay = self._rng.choice(pos, size=remove, replace=False)
-        neg_decay = self._rng.choice(neg, size=remove, replace=False)
+        pos_decay = rng.choice(pos, size=remove, replace=False)
+        neg_decay = rng.choice(neg, size=remove, replace=False)
 
         flux[pos_decay] -= 1
         flux[neg_decay] += 1

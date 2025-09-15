@@ -2,10 +2,23 @@ from matplotlib import animation as anim
 from matplotlib import pyplot as plt
 import numpy as np
 
+from sftpy import simrc as rc
 
-def plot_syn(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
-             phibins: int=360, thetabins: int=180, name: str=None,
-             flux_thresh: int=100.0, show: bool=False):
+phibins = rc["viz.phibins"]
+thetabins = rc["viz.thetabins"]
+dt = rc["general.dt"] * rc["general.savestep"]
+ms = rc["viz.ms"]
+flux_thresh = rc["viz.maps.thr"]
+
+def plot_syn(phi: np.ndarray,
+             theta: np.ndarray,
+             flux: np.ndarray,
+             nflux: int,
+             phibins: int=phibins,
+             thetabins: int=thetabins,
+             name: str=None,
+             flux_thresh: int=flux_thresh,
+             show: bool=False):
 
     h, xe, ye = np.histogram2d(
             phi[:nflux], theta[:nflux], weights=flux[:nflux],
@@ -32,8 +45,12 @@ def plot_syn(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
 
 
 
-def anim_syn(synoptic_all: np.ndarray, dt: float, phibins: int=360,
-             thetabins: int=180, flux_thresh: int=100.0, ms: int=100,
+def anim_syn(synoptic_all: np.ndarray,
+             dt: float=dt,
+             phibins: int=phibins,
+             thetabins: int=thetabins,
+             flux_thresh: int=flux_thresh,
+             ms: int=ms,
              show: bool=False):
     """
     Animate the evolution of the flux concentrations on the surface of a star.

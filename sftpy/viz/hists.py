@@ -2,7 +2,17 @@ from matplotlib import animation as anim
 from matplotlib import pyplot as plt
 import numpy as np
 
-def plot_hist(h: np.ndarray, phibins: int=360, thetabins: int=180):
+from sftpy import simrc as rc
+
+phibins = rc["viz.phibins"]
+thetabins = rc["viz.thetabins"]
+dt = rc["general.dt"] * rc["general.savestep"]
+
+
+def plot_hist(h: np.ndarray,
+              phibins: int=phibins,
+              thetabins: int=thetabins):
+
     ind = np.nonzero(h)
 
     im = plt.imshow(h.T, origin='upper', cmap="gray")
@@ -16,8 +26,12 @@ def plot_hist(h: np.ndarray, phibins: int=360, thetabins: int=180):
     plt.show()
 
 
-def plot_lat(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
-             phibins: int=360, thetabins: int=180):
+def plot_lat(phi: np.ndarray,
+             theta: np.ndarray,
+             flux: np.ndarray,
+             nflux: int,
+             phibins: int=phibins,
+             thetabins: int=thetabins):
     
     h_aflux, xe, ye = np.histogram2d(phi, theta, bins=(phibins, thetabins),
                                      weights=np.fabs(flux))
@@ -28,7 +42,9 @@ def plot_lat(phi: np.ndarray, theta: np.ndarray, flux: np.ndarray, nflux: int,
     lat_flux = np.sum(h_flux, axis=0)
 
 
-def plot_aflux(synoptic_all: np.ndarray, dt: float, show: bool=False):
+def plot_aflux(synoptic_all: np.ndarray,
+               dt: float=dt,
+               show: bool=False):
     """
     Plot the total absolute flux of the stellar surface.
     """

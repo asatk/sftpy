@@ -2,23 +2,28 @@ import abc
 import cv2 as cv
 import numpy as np
 
-from ..component import Component
-from ..constants import binflux
+from sftpy import simrc as rc
+from sftpy import rng
 
+from ..component import Component
+
+binflux = rc["physics.binflux"]
+dt = rc["general.dt"]
+thr = rc["rwalk.thr"]
+diffusion = rc["physics.diffusion"]
+loglvl = rc["component.loglvl"]
 
 class RandomWalk(Component, metaclass=abc.ABCMeta):
 
     prefix = "[rwalk]"
 
     def __init__(self,
-                 dt: float,
-                 rng: np.random.Generator,
-                 thr: float=40.0,
-                 diffusion: float=300.0,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 thr: float=thr,
+                 diffusion: float=diffusion,
+                 loglvl: int=loglvl):
         super().__init__(loglvl)
         self._dt = dt
-        self._rng = rng
         # threshold in gauss for map of abs flux density
         # flux density contour for plage perimeter
         self._thr = thr
@@ -78,7 +83,7 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
         # to the sphere at the pole, neglecting curvature
 
         # random direction to step in
-        rphi = self._rng.uniform(high=2*np.pi, size=nflux)
+        rphi = rng.uniform(high=2*np.pi, size=nflux)
         cosrphi = np.cos(rphi)
         sinrphi = np.sin(rphi)
         

@@ -1,9 +1,19 @@
 import abc
 import numpy as np
 
+from sftpy import simrc as rc
+from sftpy import rng
+
 from ..component import Component
 from ..util import Timestep
 
+latlo = rc["cycle.latlo"]
+lathi = rc["cycle.lathi"]
+period = rc["cycle.period"]
+ovr = rc["cycle.ovr"]
+peak = rc["cycle.peak"]
+mult = rc["cycle.mult"]
+loglvl = rc["component.loglvl"]
 
 class Cycle(Component, metaclass=abc.ABCMeta):
 
@@ -11,13 +21,13 @@ class Cycle(Component, metaclass=abc.ABCMeta):
     
     def __init__(self,
                  timestep: Timestep,
-                 latlo: float=0.0,
-                 lathi: float=25.0,
-                 period: float=21.9,
-                 ovr: float=3.0,
-                 peak: float=4.0,
-                 mult: float=1.0,
-                 loglvl: int=0):
+                 latlo: float=latlo,
+                 lathi: float=lathi,
+                 period: float=period,
+                 ovr: float=ovr,
+                 peak: float=peak,
+                 mult: float=mult,
+                 loglvl: int=loglvl):
         super().__init__(loglvl)
         self._timestep = timestep
         self._latlo = latlo   # minimum latitude (deg) for source emergence

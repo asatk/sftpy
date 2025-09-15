@@ -2,8 +2,17 @@ import abc
 from matplotlib import pyplot as plt
 import numpy as np
 
+from sftpy import simrc as rc
+from sftpy import rng
+
 from ..component import Component
 from ..cycle import Cycle
+
+dt = rc["general.dt"]
+dif_mult = rc["dflow.mult"]
+cyclepol = rc["dflow.cyclepol"]
+loglvl = rc["component.loglvl"]
+thr = rc["dflow.DF4.thr"]
 
 class DifferentialFlow(Component, metaclass=abc.ABCMeta):
     """
@@ -13,10 +22,10 @@ class DifferentialFlow(Component, metaclass=abc.ABCMeta):
     prefix = "[dflow]"
 
     def __init__(self,
-                 dt: float,
-                 dif_mult: float=1.0,
-                 cyclepol: int=1,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 dif_mult: float=dif_mult,
+                 cyclepol: int=cyclepol,
+                 loglvl: int=loglvl):
         super().__init__(loglvl)
         self._dt = dt
         self._dif_mult = dif_mult
@@ -131,12 +140,13 @@ class DF4(DifferentialFlow):
     prefix = "[dflow-4]"
 
     def __init__(self,
-                 dt: float,
                  cycle: Cycle,
-                 dif_mult: float=1.0,
-                 thr: float=0.0,
-                 cyclepol: int=1):
-        super().__init__(dt, dif_mult, cyclepol)
+                 thr: float=thr,
+                 dt: float=dt,
+                 dif_mult: float=dif_mult,
+                 cyclepol: int=cyclepol,
+                 loglvl: int=loglvl):
+        super().__init__(dt, dif_mult, cyclepol, loglvl)
         self._cycle = cycle
         self._thr = thr
 
@@ -198,7 +208,8 @@ class DF4(DifferentialFlow):
         phi[fflux] += scale2_diff
         phi[sflux] -= scale2_diff
         
-        if kwargs.get("showmap"):
+        # TODO -- move map to main if showmap
+        if False:
             self._synmap(phi, theta, flux, fflux, sflux, nflux)
 
     # TODO move synmap to main.py

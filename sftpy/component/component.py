@@ -1,12 +1,16 @@
 import abc
 
+from sftpy import simrc as rc
+
 from ..util import Logger
+
+loglvl = rc["component.loglvl"]
 
 class Component(metaclass=abc.ABCMeta):
 
     prefix = "[component]"
 
-    def __init__(self, loglvl: int=0):
+    def __init__(self, loglvl: int=loglvl):
         self._log = Logger(loglvl, self.prefix)
 
     def log(self, loglvl: int, msg: str):

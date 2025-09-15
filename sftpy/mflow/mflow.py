@@ -1,5 +1,13 @@
 import abc
 import numpy as np
+import sftpy
+
+from sftpy import simrc as rc
+from sftpy import rng
+
+dt = rc["general.dt"]
+mer_mult = rc["mflow.mult"]
+loglvl = rc["component.loglvl"]
 
 from ..component import Component
 
@@ -11,9 +19,9 @@ class MeridionalFlow(Component, metaclass=abc.ABCMeta):
     prefix = "[mflow]"
 
     def __init__(self,
-                 dt: float,
-                 mer_mult: float=1.0,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 mer_mult: float=mer_mult,
+                 loglvl: int=loglvl):
         super().__init__(loglvl)
         self._dt = dt
         self._mer_mult = mer_mult
@@ -39,9 +47,9 @@ class MF1(MeridionalFlow):
     prefix = "[mflow-1]"
 
     def __init__(self,
-                 dt: float,
-                 mer_mult: float=1.0,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 mer_mult: float=mer_mult,
+                 loglvl: int=loglvl):
         super().__init__(dt, mer_mult, loglvl)
         self._a = 12.9e-3 * dt / 7.e5 * mer_mult
         self._b = 1.4e-3 * dt / 7.e5 * mer_mult
@@ -60,9 +68,9 @@ class MF2(MeridionalFlow):
     prefix = "[mflow-2]"
 
     def __init__(self,
-                 dt: float,
-                 mer_mult: float=1.0,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 mer_mult: float=mer_mult,
+                 loglvl: int=loglvl):
         super().__init__(dt)
         self._a = 12.7e-3 * dt / 7.e5 * mer_mult
 
@@ -87,9 +95,9 @@ class MF3(MeridionalFlow):
     prefix = "[mflow-3]"
 
     def __init__(self,
-                 dt: float,
-                 mer_mult: float,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 mer_mult: float=mer_mult,
+                 loglvl: int=loglvl):
         super().__init__(dt, mer_mult, loglvl)
         # from km / s to rad / timestep
         self._a = 12.7e-3 * dt / 7.e5
@@ -115,9 +123,9 @@ class MF4(MeridionalFlow):
     prefix = "[mflow-4]"
     
     def __init__(self,
-                 dt: float,
                  cycle,
-                 loglvl: int=0):
+                 dt: float=dt,
+                 loglvl: int=loglvl):
         super().__init__(dt, mer_mult=0.0, loglvl=loglvl)
         self._dt = dt
         self._cycle = cycle

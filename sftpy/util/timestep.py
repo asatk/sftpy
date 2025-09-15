@@ -1,11 +1,18 @@
 from datetime import datetime
 
+from sftpy import simrc as rc
+
+dt = rc["general.dt"]
+t_init = rc["general.t_init"]
+
 class Timestep():
     """
     Class for component that tracks time through simulation.
     """
 
-    def __init__(self, dt: float, t_init: float=0.0):
+    def __init__(self,
+                 dt: float=dt,
+                 t_init: float=t_init):
         self._dt = dt
         self._time = t_init
         self._step = 0
