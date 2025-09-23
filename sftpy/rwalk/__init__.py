@@ -1,3 +1,8 @@
+"""
+RandomWalk components move sources randomly by using a model of diffusion on
+the stellar surface.
+"""
+
 from .rwalk import RandomWalk, RWNone
 from .rwalk import RW0
 from .rwalk import RW1

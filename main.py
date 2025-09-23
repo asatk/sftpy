@@ -1,24 +1,26 @@
 """
-Model driver
+Main script that runs the Solar Flux Transport model for Python.
+
+
 """
 
 import numpy as np
 
 from sftpy import simrc as rc
 
-from sftpy.collide import COLNone, COL1, COL2, COL3
-from sftpy.cycle import CYCNone, CYC0, CYC1, CYC2, CYC3, CYC4
+from sftpy.collide import COL1
+from sftpy.cycle import CYC1
 from sftpy.decay import Decay
-from sftpy.dflow import DFNone, DF1, DF2, DF3, DF4
-from sftpy.emerge import BMRNone, BMRSchrijver
+from sftpy.dflow import DF2
+from sftpy.emerge import BMRSchrijver
 from sftpy.fragment import Fragment
-from sftpy.initialize import InitSimple
-from sftpy.mflow import MFNone, MF1, MF2, MF3, MF4
-from sftpy.rwalk import RWNone, RW0, RW1, RW2
+from sftpy.initialize import InitTwo
+from sftpy.mflow import MF2
+from sftpy.rwalk import RW0, RW2
 
 from sftpy.misc import WrapPhi, WrapTheta
 from sftpy.util import Logger, synoptic_map, Timestep
-from sftpy.viz import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux
+from sftpy.viz import plot_syn, anim_syn, plot_aflux
 
 
 def loop():
@@ -126,6 +128,20 @@ def loop():
             # see L662 kit.pro (search 'Flux imbalance 0')
             flux[nflux/2:] = flux[nflux/2:] - netflux # ensure zero totalflux
             params.polarconverge = True
+        """
+        
+        """
+        # difftest -- thr syn map at 3G
+        # TODO this should be another mode and not source-dependent
+        # from movecharges:
+        # if source , 0 (testruns for diffusion models) then difftest reutnrs
+        # the flux in the synmap above a thr of 3G.
+        if source < 0:
+            # isn't np.fabs redundant?
+            synoptic_abs = np.fabs(synoptic)
+            temp = 10 / (binflux / 1.4752)
+            # where is difftest used
+            difftest = np.sum(synoptic_abs[synoptic_abs > temp]) * self._dt
         """
 
         """

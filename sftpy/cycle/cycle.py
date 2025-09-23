@@ -1,3 +1,8 @@
+"""
+These components encapsulate the behavior of a stellar activity cycle as
+determined from observations and empirical relationships.
+"""
+
 import abc
 import numpy as np
 
@@ -16,6 +21,10 @@ mult = rc["cycle.mult"]
 loglvl = rc["component.loglvl"]
 
 class Cycle(Component, metaclass=abc.ABCMeta):
+    """
+    Base class for components describing a stellar magnetic cycle using
+    empirical relationships from Schrijver's model.
+    """
 
     prefix = "[cycle]"
     
@@ -39,6 +48,17 @@ class Cycle(Component, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def cycle(self):
+        """
+        Determines the relative strength of the solar activity cycle at the
+        current timestep.
+
+        Returns
+        -------
+        source : float
+            Source strength.
+        latsource : float
+            Source emergence latitude.
+        """
         ...
 
 class CYCNone(Cycle):
@@ -53,7 +73,7 @@ class CYCNone(Cycle):
 
 class CYC3(CYCNone):
     """
-    Component for emerging no regions at all.
+    Schrijver cycle mode 3: emerging no regions at all.
     """
 
     prefix = "[cycle-3]"
@@ -62,7 +82,7 @@ class CYC3(CYCNone):
 
 class CYC0(Cycle):
     """
-    Component for fixed-strength cycle independent of time.
+    Schrijver cycle mode 0: fixed activity level independent of time.
     """
 
     prefix = "[cycle-0]"
@@ -75,7 +95,7 @@ class CYC0(Cycle):
 
 class CYC1(Cycle):
     """
-    Component for fixed-amplitude cycle
+    Schrijver cycle mode 1: fixed-amplitude activity cycle
     """
 
     prefix = "[cycle-1]"
@@ -116,6 +136,9 @@ class CYC1(Cycle):
 
 
 class CYC2(Cycle):
+    """
+    Schrijver cycle mode 2: -
+    """
     
     prefix = "[cycle-2]"
 
@@ -157,6 +180,9 @@ class CYC2(Cycle):
 
 
 class CYC4(Cycle):
+    """
+    Schrijver cycle mode 4: activity cycle matching solar minima records
+    """
 
     prefix = "[cycle-4]"
 
@@ -167,19 +193,20 @@ class CYC4(Cycle):
         1944.3, 1954.3, 1964.5, 1976.6, 1986.5, 1996.7, 2006.9, 2018.2, 2029.2,
         2040.1]) - 1646.001
 
+    # force solar conditions
+    pd = 21.9
+    ovr = 3.0
+    latlo = 0.0
+
     # matchsolarrecords
     def cycle(self):
 
-        time = self._timestep.gettime()
+        # time in years
+        time = self._timestep.gettime() / 3.15e7
         minima = CYC4.minima
     
 
         polarity = np.mod(np.arange(len(minima), dtype=np.float64), 2) * 2 - 1
-
-        # force solar conditions
-        self._pd = 21.9
-        self._ovr = 3.0
-        self._latlo = 0.0
 
         # determine index of first cycle
         yi = np.nonzero(time < minima)[0][0] - 2

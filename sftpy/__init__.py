@@ -8,10 +8,25 @@ from numpy import random as nprand
 import re
 
 class SimRC(MutableMapping, dict):
+    """
+    Runtime configuration for the simulation.
+    """
 
     # TODO rewrite as actual parser
 
     def __init__(self, sec_unnamed: str=""):
+        """
+        Create the runtime configuration object and its regex patterns
+        for parsing.
+
+        The SimRC will eventually parse config files in a less hacky,
+        more principled approach.
+
+        Parameters
+        ----------
+        sec_unnamed : str
+            Name for the first section of a config file; it may not have a name.
+        """
 
         # unnamed section default for top of file w/o section
         self._sec_unnamed = sec_unnamed
@@ -35,6 +50,20 @@ class SimRC(MutableMapping, dict):
 
 
     def rc_from_file(self, fname: str):
+        """
+        Read runtime configuration from file.
+
+        Parameters
+        ----------
+        fname : str
+            Path to runtime configuration file.
+
+        Returns
+        -------
+        rc : dict
+            Dictionary of runtime parameters.
+        """
+
         rc = {}
         with open(fname) as file:
             sec = self._sec_unnamed

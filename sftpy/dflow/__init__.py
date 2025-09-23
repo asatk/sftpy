@@ -1,3 +1,8 @@
+"""
+Differential rotation components move flux across longitudes (along phi axis)
+at different speeds for different co-latitudes (thetas).
+"""
+
 from .dflow import DifferentialFlow, DFNone
 from .dflow import DF1
 from .dflow import DF2

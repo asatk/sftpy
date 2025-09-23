@@ -1,3 +1,8 @@
+"""
+Differential flow patterns per Schrijver 2001 (a). See Eq. A3
+"""
+
+
 import abc
 from matplotlib import pyplot as plt
 import numpy as np
@@ -26,6 +31,20 @@ class DifferentialFlow(Component, metaclass=abc.ABCMeta):
                  dif_mult: float=dif_mult,
                  cyclepol: int=cyclepol,
                  loglvl: int=loglvl):
+        """
+        Initializes a DifferentialFlow component.
+
+        Parameters
+        ----------
+        dt : float
+            Timestep (s)
+        dif_mult : float
+            Relative strength of differential rotation
+        cyclepol : int
+            Polarity of the current cycle
+        loglvl : int
+            Maximum logging level
+        """
         super().__init__(loglvl)
         self._dt = dt
         self._dif_mult = dif_mult
@@ -36,12 +55,27 @@ class DifferentialFlow(Component, metaclass=abc.ABCMeta):
              phi: np.ndarray,
              theta: np.ndarray,
              flux: np.ndarray,
-             nflux: int,
-             **kwargs):
-        ...
+             nflux: int):
+        """
+        Move spots according to a Schrijver differential rotation profile.
+
+        Parameters
+        ----------
+        phi : np.ndarray
+            Longitudes of spots
+        theta : np.ndarray
+            Co-latitudes of spots
+        flux : np.ndarray
+            Fluxes of spots
+        nflux : int
+            Number of spots
+        """
 
 
 class DFNone(DifferentialFlow):
+    """
+    Trivial component that performs no differential rotation.
+    """
 
     prefix = "[dflow-none]"
 
@@ -54,6 +88,9 @@ class DFNone(DifferentialFlow):
 
 
 class DF1(DifferentialFlow):
+    """
+    Schrijver differential mode 1 -
+    """
 
     prefix = "[dflow-1]"
 
@@ -81,6 +118,9 @@ class DF1(DifferentialFlow):
 
 
 class DF2(DifferentialFlow):
+    """
+    Schrijver differential mode 2 -
+    """
 
     prefix = "[dflow-2]"
 
@@ -108,6 +148,9 @@ class DF2(DifferentialFlow):
 
 
 class DF3(DifferentialFlow):
+    """
+    Schrijver differential mode 3 -
+    """
 
     prefix = "[dflow-3]"
 
@@ -136,7 +179,9 @@ class DF3(DifferentialFlow):
 
 
 class DF4(DifferentialFlow):
-
+    """
+    Schrijver differential mode 4 -
+    """
     prefix = "[dflow-4]"
 
     def __init__(self,
@@ -190,6 +235,8 @@ class DF4(DifferentialFlow):
         # what if flux was limited to nflux elemetns instead of whole array
 
         # TODO this is wrong; fluxes move opposite dirs
+        # is this wrong?
+
         # fast flux and slow flux
         if sdiff > 0:
             fflux = (flux >  thr) & (theta >  np.pi/6) & (theta <   np.pi/2) | \

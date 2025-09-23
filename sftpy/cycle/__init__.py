@@ -1,3 +1,8 @@
+"""
+Cycle components determine the level of stellar activity or equivalently the
+number of star spots to emerge.
+"""
+
 from .cycle import Cycle, CYCNone
 from .cycle import CYC0
 from .cycle import CYC1

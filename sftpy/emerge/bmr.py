@@ -1,3 +1,7 @@
+"""
+
+"""
+
 import abc
 import numpy as np
 
@@ -33,7 +37,8 @@ maxflux = rc["schrijver.maxflux"]
 
 class BMREmerge(Component, metaclass=abc.ABCMeta):
     """
-    Base class for Bipole Magnetic Region emergence.
+    Base class for Bipole Magnetic Region emergence components that follow
+    Schrijver's recipes and patterns of flux emergence.
     """
 
     prefix = "[bmr]"
@@ -52,9 +57,9 @@ class BMREmerge(Component, metaclass=abc.ABCMeta):
                theta: np.ndarray,
                flux: np.ndarray,
                nflux: int,
-               source,
-               latsource,
-               synoptic):
+               source: np.ndarray,
+               latsource: np.ndarray,
+               synoptic: np.ndarray,):
         ...
 
 
@@ -65,10 +70,35 @@ class BMRNone(BMREmerge):
                theta: np.ndarray,
                flux: np.ndarray,
                nflux: int,
-               source,
-               latsource,
-               synoptic):
+               source: np.ndarray,
+               latsource: np.ndarray,
+               synoptic: np.ndarray):
         return phi, theta, flux, nflux
+
+
+class BMRAssimilate(BMREmerge):
+    """
+    Component for BMR emergence that assimilates solar magnetogram data.
+    """
+
+    prefix = "[bmr-assim]"
+
+    def __init__(self,
+                 dt: float=dt,
+                 nfluxmax: int=nfluxmax,
+                 loglvl: int=loglvl):
+        super().__init__(dt, nfluxmax, loglvl)
+
+    def emerge(self,
+               phi: np.ndarray,
+               theta: np.ndarray,
+               flux: np.ndarray,
+               nflux: int,
+               source: np.ndarray=None,
+               latsource: np.ndarray=None,
+               synoptic: np.ndarray=None):
+        ...
+
 
 
 class BMRSchrijver(BMREmerge):
@@ -99,8 +129,8 @@ class BMRSchrijver(BMREmerge):
                theta: np.ndarray,
                flux: np.ndarray,
                nflux: int,
-               source,
-               latsource,
+               source: np.ndarray,
+               latsource: np.ndarray,
                synoptic: np.ndarray):
 
         dt = self._dt

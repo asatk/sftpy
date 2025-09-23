@@ -1,3 +1,15 @@
+"""
+Collision schemes from the original Schrijver+ model:
+ - COL1: sequentially coalesce nearby spots into randomly-selected final spot.
+ - COL2: ?
+ - COL3: like COL2 but in C
+
+"""
+
+# TODO
+# parameter in kit_iocontrol.pro `collide`
+# Collisions 0-none 1-equal polatiry, 2-both polarities
+
 import abc
 import numpy as np
 
@@ -177,6 +189,9 @@ class COLScan(Collide):
 
 
 class COL1(Collide):
+    """
+
+    """
 
     def collide(self,
                 phi: np.ndarray,

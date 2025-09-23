@@ -1,7 +1,3 @@
-"""
-Decay field
-"""
-
 import numpy as np
 
 from sftpy import simrc as rc
@@ -15,7 +11,11 @@ loglvl = rc["component.loglvl"]
 
 class Decay(Component):
     """
-    Component class for random decay of flux conecentrations.
+    `Decay` gradually reduces the overall stellar magnetic flux according to
+    patterns observed on the Sun.
+
+    REF
+
     """
 
     prefix = "[decay]"
@@ -24,13 +24,40 @@ class Decay(Component):
                  dt: float=dt,
                  t_decay: float=t_decay,
                  loglvl: int=loglvl):
+        """
+        Create a Decay component, optionally specifying the timestep and decay
+        time.
+
+        The timescales `dt` and `t_decay` determine the factor by which total
+        absolute magnetic flux reduces. A decay constant `t_decay` of 1000 yrs
+        or greater yields no decay.
+
+        Parameters
+        ----------
+        dt : float
+            Timestep (seconds).
+        t_decay : float
+            Decay constant (years).
+        loglvl : int
+            Logging level for this component.
+
+        Notes
+        -----
+        The factor by which the total absolute flux is reduced is $1 - 2^{
+        -dt/t_decay}$. From each polarity, half of this amount of flux is
+        removed from spots randomly chosen with replacement.
+
+        REFS
+        """
         super().__init__(loglvl)
-        self._factor = 1 - np.exp(-np.log(2) * dt / 365.25 / 86400 / t_decay)
 
         # no decay if decay timescale is too large
-        if t_decay > 999:
-            self.log(0, "long decay half-life: decay ignored")
-            return None
+        if t_decay >= 1000:
+            self.log(0, "long decay half-life (> 1000 yr): no decay")
+            self._factor = 0
+        else:
+            self._factor = 1 - np.exp(
+                -np.log(2) * dt / 365.25 / 86400 / t_decay)
 
 
     def decay(self, 
@@ -38,53 +65,94 @@ class Decay(Component):
               theta: np.ndarray,
               flux: np.ndarray,
               nflux: int):
+        """
+        Remove flux from the total field.
 
-        # number of flux concentrations to remove for this step
-        remove = np.sum(np.abs(flux) / 2) * self._factor
+        Flux is removed equally from both positive and negative spots. Spots
+        are chosen at random. The decrement is determined by the factor
+        $1 - 2^{dt/t_{decay}}$.
 
-        # fractional amt rounded up w/ random prob equal to fraction
-        remainder = remove - np.int64(remove)
-        if rng.uniform() < remainder:
-            remove += 1
+        Parameters
+        ----------
 
-        # integer number of flux concentrations to remove
-        remove = np.int64(remove)
+        phi : np.ndarray
+            Array of longitudes of spots (radians)
+        theta : np.ndarray
+            Array of co-latitudes of spots (radians)
+        flux : np.ndarray
+            Array of fluxes of spots (int)
+        nflux : int
+            Number of spots
 
-        self.log(1, f"remove: {remove}/{nflux}")
+        Returns
+        -------
+        nflux : int
+            Number of spots remaining after decay
 
-        # no flux concentrations will be removed
-        if remove == 0:
+        """
+
+        # too small of a timescale to decay any magnetic flux
+        if self._factor == 0:
             return nflux
 
-        # identify all positive and negative flux concentrations
+        # total absolute flux of all spots
+        aflux = np.sum(np.abs(flux))
+
+        # flux to be removed per polarity (hence div by 2)
+        remove = aflux / 2 * self._factor
+
+        # integer amount of flux to decay
+        ndecay = int(remove)
+
+        # random chance to round up fractional flux amount to integer
+        if rng.uniform() < remove - ndecay:
+            ndecay += 1
+
+        self.log(1, f"remove flux per polarity: {ndecay}/{aflux}")
+
+        # no flux will be removed
+        if ndecay == 0:
+            return nflux
+
+        # no non-zero fluxes exist (only empty spots)
+        if np.count_nonzero(flux[:nflux]) == 0:
+            self.log(0, f"no spots remaining: {nflux} -> 0")
+            return 0
+
+        # identify all positive and negative spots
         pos = np.nonzero(flux[:nflux] > 0)[0]
         neg = np.nonzero(flux[:nflux] < 0)[0]
 
-        # TODO should this be pos < 0 and neg > 0 -- i don't understand this stmt
-        if not np.any(pos) and not np.any(neg):
+        # select `ndecay` spots from which to decay flux (random w/ replacement)
+        ind_pos_decay = rng.choice(pos, size=ndecay, replace=True)
+        ind_neg_decay = rng.choice(neg, size=ndecay, replace=True)
+
+        # indices of all spots that will decay flux
+        ind_decay = np.r_[ind_pos_decay, ind_neg_decay]
+
+        # determine the unique indices of spots to be decayed and their counts
+        ind_unique, flux_decay = np.unique(ind_decay, return_counts=True)
+
+        # determine spots that will have no flux after decaying
+        will_empty = flux[ind_unique] <= flux_decay
+
+        # decay only the flux they have available -- don't want to flip signs
+        flux_decay[will_empty] = flux[ind_unique][will_empty]
+
+        # decay the spots chosen to lose flux
+        flux[ind_unique] -= np.sign(flux[ind_unique]) * flux_decay
+
+        # no empty spots -- move on to next step
+        if not np.any(will_empty):
             return nflux
 
-        # select `remove` number of positive and negative concentrations to decay
-        pos_decay = rng.choice(pos, size=remove, replace=False)
-        neg_decay = rng.choice(neg, size=remove, replace=False)
+        # remove empty spots
+        ind = np.nonzero(flux[:nflux])[0]
+        nremain = len(ind)
 
-        flux[pos_decay] -= 1
-        flux[neg_decay] += 1
+        # only maintain list spots with non-zero flux
+        phi[:nremain] = phi[ind]
+        theta[:nremain] = theta[ind]
+        flux[:nremain] = flux[ind]
 
-        # "remove 'empty' concentrations if necessary"
-        # so this takes care of concentrations that have been fully decayed
-        # TODO how can we avoid this -- array list?
-        ind = flux[:nflux] != 0
-        ndecay = np.sum(ind)
-
-        if ndecay == nflux:
-            return nflux
-
-        phi[:ndecay] = phi[:nflux][ind]
-        theta[:ndecay] = theta[:nflux][ind]
-        flux[:ndecay] = flux[:nflux][ind]
-
-        nflux = ndecay
-
-        return nflux
-
+        return nremain
