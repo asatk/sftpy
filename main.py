@@ -47,7 +47,7 @@ def loop():
     twrap = WrapTheta()
     cycle = CYC1(time)
     rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
-    ini = InitSimple(nfluxmax)
+    ini = InitTwo(nfluxmax)
 
     decay = Decay()
     rwalk = RW2(dt)
@@ -77,7 +77,7 @@ def loop():
 
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
-        synoptic = rwalk.move(phi, theta, flux, nflux, synoptic, source)
+        synoptic = rwalk.move(phi, theta, flux, nflux, synoptic)
         dflow1.move(phi, theta, flux, nflux)
         mflow.move(theta, nflux)
         dflow2.move(phi, theta, flux, nflux)

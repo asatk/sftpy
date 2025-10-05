@@ -36,9 +36,9 @@ class SimRC(MutableMapping, dict):
         # pattern for section name
         self._psec = re.compile(r"^\[(\w+(\.\w+)*)\]")
         # pattern for key-value pairs -- this can capture wrong things.
-        self._pkvpair = re.compile(r"(\w+)\s*(=|:)\s*(([a-zA-Z0-9._,$](,\s*)?)+)")
+        self._pkvpair = re.compile(r"(\w+)\s*(=|:)\s*(([a-zA-Z0-9._,$\-+](,\s*)?)+)")
         # pattern for ints
-        self._pint = re.compile(r"(0(x|b))?(\d+_)*\d+")
+        self._pint = re.compile(r"(\+|-|(0(x|b)))?(\d+_)*\d+")
         # pattern for floats
         self._pfloat = re.compile(r"((\d+_)*\d+)?\.?\d*(e(\+|-)?\d+)?")
     
@@ -94,9 +94,9 @@ class SimRC(MutableMapping, dict):
                 mint = self._pint.fullmatch(val)
                 #print(mint)
                 if mint is not None:
-                    if mint.group(2) == "b":
+                    if mint.group(3) == "b":
                         val = int(val, 2)
-                    elif mint.group(2) == "x":
+                    elif mint.group(3) == "x":
                         val = int(val, 16)
                     else:
                         val = int(val, 10)

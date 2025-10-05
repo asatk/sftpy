@@ -98,6 +98,8 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
             Dilated synoptic map.
 
         """
+        if synoptic is None:
+            return None
 
         # threshold flux to include locations of plages -- binary map
         synoptic_thr = np.astype(synoptic > self._thr / (binflux / 1.4752), np.uint8)
@@ -227,7 +229,7 @@ class RW1(RandomWalk):
 
         # flatten 2d abs flux map into 1d array.
         flat_map = np.ravel(np.fabs(synoptic))
-        wherepx = np.where(flat_map > 0))
+        wherepx = np.where(flat_map > 0)
 
         ### determine the pixel in synoptic to which each source belongs
 
