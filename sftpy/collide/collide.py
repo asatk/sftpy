@@ -8,7 +8,7 @@ Collision schemes from the original Schrijver+ model:
 
 # TODO
 # parameter in kit_iocontrol.pro `collide`
-# Collisions 0-none 1-equal polatiry, 2-both polarities
+# Collisions 0-none 1-opposite polarity, 2-both polarities
 
 import abc
 import numpy as np
@@ -97,6 +97,7 @@ class Collide(Component, metaclass=abc.ABCMeta):
         ...
 
 
+
 class COLNone(Collide):
 
     def collide(self,
@@ -110,6 +111,8 @@ class COLNone(Collide):
 
         r = self._collide_start(phi, theta, flux, nflux)
         return self._collide_finish(phi, theta, flux, nflux)
+
+
 
 class COLScan(Collide):
     """
@@ -284,70 +287,8 @@ class COL1(Collide):
         return self._collide_finish(phi, theta, flux, nflux)
 
 
+
 class COL2(Collide):
-
-    def collide(self,
-                phi: np.ndarray,
-                theta: np.ndarray,
-                flux: np.ndarray,
-                nflux: int):
-
-        if nflux <= 2:
-            return nflux
-
-        r = self._collide_start(phi, theta, flux, nflux)
-
-        for i in range(nflux-1):
-
-            # skip empty flux concentration
-            if flux[i] == 0:
-                continue
-
-            thetalo = theta[i] - self._crphi
-            lo = max(i-25, 0)
-
-            # do some mod arithmetic
-            while (theta[lo] > thetalo and lo > 0):
-                lo = max(lo-25, 0)
-
-            thetahi = theta[i] + self._crphi
-            hi = min(i+25, nflux-1)
-
-            # do some mod arithmetic
-            while (theta[hi] < thetahi and hi < nflux-1):
-                hi = min(hi+25, nflux-1)
-
-            lcrphi = self._crphi / np.sin(theta[i])
-
-            ind1 = np.nonzero(np.fabs(phi[i] - phi[lo:hi+1]) < lcrphi)[0] + lo
-            ind2 = np.nonzero(
-                    (np.sum(np.square(r[:,[i]] - r[:, ind1])) < critical) & \
-                    (flux[ind1] != 0))[0]
-
-            if self._track:
-                cancelflux = np.fabs(np.sum(np.fabs(flux[ind2])) - np.sum(flux[ind2]))/2
-                # TODO check if this is just a non-empty condition
-                # TODO what is this
-                if cancelflux > 0:
-                    self.log(1, f"[collide] ---- cancelflux {cancelflux}")
-
-            flux[i] = np.sum(flux[ind2])
-            n = len(ind2)
-
-            # eliminate coalesced concentrations
-            if n > 1:
-                flux[ind2[ind2 != i]] = 0
-
-                ic = rng.choice(ind2)
-                phi[i] = phi[ic]
-                theta[i] = theta[ic]
-
-        return self._collide_finish(phi, theta, flux, nflux)
-
-
-MAX_NEIGHBORS = 100_000
-
-class COL3(Collide):
 
     def __init__(self,
                  range: int=25,
@@ -359,14 +300,10 @@ class COL3(Collide):
                  loglvl: int = loglvl):
         super().__init__(dt, correction, meanv, diffusion, trackcancel, loglvl)
         self._range = range
-        self._neighbors = np.empty(MAX_NEIGHBORS, dtype=np.int64)
-
 
     @property
     def range(self):
         return self._range
-
-
 
     def collide(self,
                 phi: np.ndarray,
@@ -377,6 +314,7 @@ class COL3(Collide):
         if nflux <= 2:
             return nflux
 
+        # sorting is not the bottleneck
         sort_idx = np.argsort(theta[:nflux])
         phi[:nflux] = phi[sort_idx]
         theta[:nflux] = theta[sort_idx]
@@ -384,14 +322,21 @@ class COL3(Collide):
 
         r = self._collide_start(phi, theta, flux, nflux)
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
-        neighbors = self._neighbors
 
         for i in order:
 
             if flux[i] == 0:
                 continue
 
+            self._log.clockstart(2)
             thetalo = theta[i] - self._crphi
+
+            # ind_thetalo = np.nonzero(theta - thetalo > 0)[0]
+            # if len(ind_thetalo) == 0:
+            #     lo = 0
+            # else:
+            #     lo = ind_thetalo[0]
+
             lo = i - self._range
             if lo < 0:
                 lo = 0
@@ -401,7 +346,16 @@ class COL3(Collide):
                 if lo < 0:
                     lo = 0
 
+            # self._log.clockstop(2, "collide thetalo end")
+
             thetahi = theta[i] + self._crphi
+
+            # ind_thetahi = np.nonzero(theta - thetahi > 0)[0]
+            # if len(ind_thetahi) == 0:
+            #     hi = nflux - 1
+            # else:
+            #     hi = ind_thetahi[0]
+
             hi = i + self._range
             if hi > nflux-1:
                 hi = nflux-1
@@ -413,25 +367,35 @@ class COL3(Collide):
 
             lcrphi = self._crphi / np.sin(theta[i])
 
-            k = 0
-            for j in range(lo, hi):
-                d = abs(phi[i] - phi[j])
-                if d < lcrphi:
-                    neighbors[k] = j
-                    k += 1
+            # k = 0
+            # for j in range(lo, hi):
+            #     d = abs(phi[i] - phi[j])
+            #     if d < lcrphi:
+            #         neighbors[k] = j
+            #         k += 1
 
-            n = 0
-            for j in range(k):
-                neighbor = neighbors[j]
-                d = np.sum(np.square(r[i] - r[neighbor]))
-                if flux[neighbor] != 0 and d < self._critical:
-                    neighbors[n] = neighbor
-                    n += 1
+            neighbors_theta = np.arange(lo, hi)
+            dists_phi = np.abs(phi[i] - phi[neighbors_theta])
+            neighbors_phi = neighbors_theta[dists_phi < lcrphi]
 
-            if n > 1:
-                neighbors_shuffled = neighbors[rng.permutation(n)]
-                flux_sum = np.sum(flux[neighbors_shuffled])
-                flux[neighbors_shuffled[1:]] = 0.0
-                flux[neighbors_shuffled[0]] = flux_sum
+            # n = 0
+            # for j in range(k):
+            #     neighbor = neighbors[j]
+            #     d = np.sum(np.square(r[i] - r[neighbor]))
+            #     if flux[neighbor] != 0 and d < self._critical:
+            #         neighbors[n] = neighbor
+            #         n += 1
+
+            dists = np.sum(np.square(r[i] - r[neighbors_phi]), axis=1)
+            ind_neighbors = (dists < self._critical) & (flux[neighbors_phi] != 0)
+            neighbors = neighbors_phi[ind_neighbors]
+            rng.shuffle(neighbors)
+
+
+
+            if len(neighbors) > 1:
+                flux_sum = np.sum(flux[neighbors])
+                flux[neighbors[1:]] = 0.0
+                flux[neighbors[0]] = flux_sum
 
         return self._collide_finish(phi, theta, flux, nflux)

@@ -38,4 +38,7 @@ class Logger():
             return delta
         return timedelta(0)
 
+    # def clockpause(self, c: int|str):
+    #
+
 

@@ -8,7 +8,7 @@ import numpy as np
 
 from sftpy import simrc as rc
 
-from sftpy.collide import COL1, COL3
+from sftpy.collide import COL1, COL2
 from sftpy.cycle import CYC1
 from sftpy.decay import Decay
 from sftpy.dflow import DF2
@@ -54,7 +54,7 @@ def loop():
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL3(loglvl=2)
+    collide = COL2(loglvl=2)
     fragment = Fragment(rwalk_frag)
     bmr = BMRSchrijver(nfluxmax, loglvl=0)
 
