@@ -345,7 +345,28 @@ class COL2(Collide):
         return self._collide_finish(phi, theta, flux, nflux)
 
 
+MAX_NEIGHBORS = 100_000
+
 class COL3(Collide):
+
+    def __init__(self,
+                 range: int=25,
+                 dt: float = dt,
+                 correction: float = correction,
+                 meanv: float = meanv,
+                 diffusion: float = diffusion,  # TODO check if diff is in IDL code
+                 trackcancel: bool = False,
+                 loglvl: int = loglvl):
+        super().__init__(dt, correction, meanv, diffusion, trackcancel, loglvl)
+        self._range = range
+        self._neighbors = np.empty(MAX_NEIGHBORS, dtype=np.int64)
+
+
+    @property
+    def range(self):
+        return self._range
+
+
 
     def collide(self,
                 phi: np.ndarray,
@@ -356,71 +377,61 @@ class COL3(Collide):
         if nflux <= 2:
             return nflux
 
+        sort_idx = np.argsort(theta[:nflux])
+        phi[:nflux] = phi[sort_idx]
+        theta[:nflux] = theta[sort_idx]
+        flux[:nflux] = flux[sort_idx]
+
         r = self._collide_start(phi, theta, flux, nflux)
-
-        # TODO compiled C code -- just write in py for now
-        # TODO um
-        nflux = long(nflux)
-        # TODO but this isnt nflux?
-        #order = np.zeros(len(flux))
-
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
+        neighbors = self._neighbors
 
-        for i in range(nflux-1):
-            
-            ind = order[i]
-            
-            if flux[ind] == 0:
+        for i in order:
+
+            if flux[i] == 0:
                 continue
 
-            thetalo = theta[ind] - self._crphi
-            lo = ind-25
+            thetalo = theta[i] - self._crphi
+            lo = i - self._range
             if lo < 0:
                 lo = 0
 
-            while (theta[lo] > thetalo and low > 0):
-                lo = lo - 25
+            while (theta[lo] > thetalo and lo > 0):
+                lo = lo - self._range
                 if lo < 0:
                     lo = 0
 
-            thetahi = theta[ind] + self._crphi
-            hi = ind+25
+            thetahi = theta[i] + self._crphi
+            hi = i + self._range
             if hi > nflux-1:
                 hi = nflux-1
 
             while (theta[hi] < thetahi and hi < nflux-1):
-                hi = hi+25
-                if hi > nflux - 1:
+                hi = hi + self._range
+                if hi > nflux-1:
                     hi = nflux-1
 
-            lcrphi = self._crphi / np.sin(theta[ind])
+            lcrphi = self._crphi / np.sin(theta[i])
 
             k = 0
             for j in range(lo, hi):
-                d = phi[ind] - phi[j]
-                if d < 0:
-                    d = -d
+                d = abs(phi[i] - phi[j])
                 if d < lcrphi:
-                    # TODO what is index?
-                    index[k] = j
+                    neighbors[k] = j
                     k += 1
 
             n = 0
             for j in range(k):
-                ind2 = index[j]
-                d = np.sum(np.square(r[:, ind] - r[:, ind2]))
-                if d < self._critical and flux[ind] != 0:
-                    index[n] = ind2
+                neighbor = neighbors[j]
+                d = np.sum(np.square(r[i] - r[neighbor]))
+                if flux[neighbor] != 0 and d < self._critical:
+                    neighbors[n] = neighbor
                     n += 1
 
-            # TODO rng.choice? what is index (wht is length)
-            ic = rng.integers(n)
-            ic = index[ic]
-
-            for j in range(n):
-                if ic != index[j]:
-                    ind2 = index[j]
-                    flux[ic] += flux[ind2]
-                    flux[ind2] = 0
+            if n > 1:
+                neighbors_shuffled = neighbors[rng.permutation(n)]
+                flux_sum = np.sum(flux[neighbors_shuffled])
+                flux[neighbors_shuffled[1:]] = 0.0
+                flux[neighbors_shuffled[0]] = flux_sum
 
         return self._collide_finish(phi, theta, flux, nflux)
