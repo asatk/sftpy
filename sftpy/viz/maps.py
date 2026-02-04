@@ -30,7 +30,6 @@ def plot_syn(phi: np.ndarray,
     
     im = ax.imshow(h.T, origin='upper', cmap="gray", vmin=-flux_thresh,
                     vmax=flux_thresh)
-    #plt.scatter(ind[0], ind[1], marker="o", facecolors='none', color="orange")
     ax.set_title(name)
     ax.set_xlabel(r"Azimuth $\phi$")
     ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])

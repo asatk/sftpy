@@ -68,12 +68,12 @@ def loop():
     synoptic_save = synoptic_map(phi, theta, flux, nflux)
     synoptic_all[0] = synoptic_save
 
-    logger.clockstart("sim", "Simulation begins:")
+    logger.clock_start("sim", "Simulation begins:")
     for i in range(1, nstep):
 
         time.step()
         logger.log(1, f"[{i}] t = {time/86400/365:.02g} yr")
-        logger.clockstart("iter")
+        logger.clock_start("iter")
 
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
@@ -85,21 +85,20 @@ def loop():
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
-        logger.clockstart("col")
+        logger.clock_start("col")
         nflux = collide.collide(phi, theta, flux, nflux)
-        logger.clockstop("col", "collide: ")
+        logger.clock_check("col", "collide: ")
         nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
         source_str *= inv_pol * 2 - 1
 
-        logger.clockstart("emerge")
         phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux, source_str, latsource, synoptic)
-        logger.clockstop("emerge", "emerge: ")
 
         if i % savestep == 0:
             synoptic_save = synoptic_map(phi, theta, flux, nflux)
             synoptic_all[i//savestep] = synoptic_save
+            logger.clock_check("sim", "Simulation elapsed time: ")
 
 
         logger.log(1, f"nflux {nflux}")
@@ -109,7 +108,7 @@ def loop():
             plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
                      f"({time/86400:.01f} d)", show=True)
 
-        logger.clockstop("iter", f"[{i}]")
+        logger.clock_check("iter", f"[{i}]")
 
 
     '''
@@ -203,8 +202,8 @@ def loop():
     '''
 
     # finish
-    logger.clockstop("sim", "Simulation completed in ")
-    logger.clockstart("sim", "Simulation finished: ")
+    logger.clock_stop("sim", "Simulation completed in ")
+    logger.clock_start("sim", "Simulation finished: ")
 
     plot_syn(phi, theta, flux, nflux, name="Final Stellar Surface", show=True)
 

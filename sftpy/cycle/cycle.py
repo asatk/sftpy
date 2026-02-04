@@ -210,10 +210,10 @@ class CYC4(Cycle):
 
         # determine index of first cycle
         yi = np.nonzero(time < minima)[0][0] - 2
-        yd = 2 * np.array([minima[yi+1] - minima[yi], \
+        yd = 2 * np.array([minima[yi+1] - minima[yi],
                            minima[yi+2] - minima[yi+1]])
 
-        a = np.pi * np.array([(time - minima[yi]) / (yd[0] / 2 + self._ovr), \
+        a = np.pi * np.array([(time - minima[yi]) / (yd[0] / 2 + self._ovr),
                               (time - minima[yi+1]) / (yd[1] / 2 + self._ovr)])
         # clipped sin
         # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
