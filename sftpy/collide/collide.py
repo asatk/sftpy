@@ -55,6 +55,95 @@ def consolidate(phi: np.ndarray,
 
     return nnew
 
+@nb.njit(cache=True)
+def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
+    # sorting is not the bottleneck
+    sort_idx = np.argsort(theta[:nflux])
+    phi[:nflux] = phi[sort_idx]
+    theta[:nflux] = theta[sort_idx]
+    flux[:nflux] = flux[sort_idx]
+
+    neighbors_nz = flux[:nflux] != 0
+
+    # r = calculate_pos(phi, theta, nflux)
+    sintheta = np.sin(theta[:nflux])
+    x = sintheta * np.cos(phi[:nflux])
+    y = sintheta * np.sin(phi[:nflux])
+    z = np.cos(theta[:nflux])
+    l = (x, y, z)
+    r = np.stack(l, axis=1)
+
+    los = np.arange(0 - skips, nflux - skips, dtype=np.int64)
+    los = np.clip(los, 0, nflux)
+    his = np.arange(skips, nflux + skips, dtype=np.int64)
+    his = np.clip(his, 0, nflux)
+
+    # TODO the clips are in there b/c numba doesn't seem to like handling negative or oob indices
+    # check the lo and hi calcs
+
+    for i in order:
+
+        if not neighbors_nz[i]:
+            continue
+
+        lo = los[i]
+        thetalo = theta[i] - crphi
+        while theta[lo] > thetalo:
+            lo = lo - skips
+            if lo < 0:
+                thetalo += 2 * np.pi
+
+        his[lo] = i
+
+        hi = his[i]
+        thetahi = theta[i] + crphi
+        while theta[hi] < thetahi:
+            hi = hi + skips
+            if hi >= nflux:
+                thetahi -= 2 * np.pi
+                hi -= nflux
+
+        los[hi] = i
+
+        lcrphi = crphi / sintheta[i]
+        neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
+
+        phi_diff = phi[i] - phi[neighbors_theta]
+        phi_dist = np.abs(phi_diff)
+        is_near_phi = phi_dist < lcrphi
+        neighbors_phi = neighbors_theta[is_near_phi]
+
+        r_diff = r[i] - r[neighbors_phi]
+        r_dist = np.sum(np.square(r_diff), axis=1)
+        is_near = r_dist < crphi ** 2
+        neighbors = neighbors_phi[is_near]
+
+        n_neighbors = len(neighbors)
+        if n_neighbors > 1:
+            np.random.seed(seeds[i])
+
+            ind_coalesce = np.random.randint(len(neighbors))
+            nbr_coalesce = neighbors[ind_coalesce]
+
+            flux_sum = np.sum(flux[neighbors])
+
+            flux[neighbors] = 0.0
+            flux[nbr_coalesce] = flux_sum
+
+            neighbors_nz[neighbors] = False
+            neighbors_nz[nbr_coalesce] = True
+
+    index = np.nonzero(flux[:nflux])[0]
+    nnew = len(index)
+    if nflux == nnew:
+        return nflux
+
+    phi[:nnew] = phi[index]
+    theta[:nnew] = theta[index]
+    flux[:nnew] = flux[index]
+
+    return nnew
+
 
 class Collide(Component, metaclass=abc.ABCMeta):
     """
@@ -303,60 +392,6 @@ class COL1(Collide):
 
 
 
-@nb.njit(cache=True)
-def find_dist_nbrs(r, phi, i, lo, hi, lcrphi, critical):
-    neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
-
-    phi_diff = phi[i] - phi[neighbors_theta]
-    phi_dist = np.abs(phi_diff)
-    is_near_phi = phi_dist < lcrphi
-    neighbors_phi = neighbors_theta[is_near_phi]
-
-    r_diff = r[i] - r[neighbors_phi]
-    r_dist = np.sum(np.square(r_diff), axis=1)
-    is_near = r_dist < critical
-    neighbors = neighbors_phi[is_near]
-    return neighbors
-
-@nb.njit(cache=True)
-def coalesce(i, neighbors, neighbors_nz, flux):
-    nbr_coalesce = neighbors[i]
-
-    flux_sum = np.sum(flux[neighbors])
-
-    flux[neighbors] = 0.0
-    flux[nbr_coalesce] = flux_sum
-
-    neighbors_nz[neighbors] = False
-    neighbors_nz[nbr_coalesce] = True
-    return flux
-
-
-@nb.njit(cache=True)
-def find_lo(theta, i, los, his, crphi, skips):
-    lo = los[i]
-    thetalo = theta[i] - crphi
-    while theta[lo] > thetalo:
-        lo = lo - skips
-        if lo < 0:
-            thetalo += 2 * np.pi
-
-    his[lo] = i
-    return lo
-
-@nb.njit(cache=True)
-def find_hi(theta, i, los, his, crphi, skips, nflux):
-    hi = his[i]
-    thetahi = theta[i] + crphi
-    while theta[hi] < thetahi:
-        hi = hi + skips
-        if hi >= nflux:
-            thetahi -= 2 * np.pi
-            hi -= nflux
-
-    los[hi] = i
-    return hi
-
 class COL2(Collide):
 
     def __init__(self,
@@ -380,72 +415,17 @@ class COL2(Collide):
                 flux: np.ndarray,
                 nflux: int):
 
-        if nflux <= 2:
+        if nflux < 2:
             return nflux
 
-        log = self._log
         skips = self._range
         # skips = nflux // 1000 + 1
-        critical = self._critical
         crphi = self._crphi
+        order = rng.permutation(np.arange(nflux, dtype=np.int64))
+        seeds = rng.integers(low=2 ** 64 - 1, size=nflux, dtype=np.uint64)
 
-        log.clock_start(1)
+        nnew = collide2(phi, theta, flux, nflux, skips, crphi, order, seeds)
 
-        # sorting is not the bottleneck
-        sort_idx = np.argsort(theta[:nflux])
-        phi[:nflux] = phi[sort_idx]
-        theta[:nflux] = theta[sort_idx]
-        flux[:nflux] = flux[sort_idx]
+        self.log(2, f"spots remaining: {nnew}/{nflux}")
 
-        neighbors_nz = flux[:nflux] != 0
-        nbr_range = np.arange(nflux, dtype=np.int64)
-
-        r = calculate_pos(phi, theta, nflux)
-        order = rng.permutation(nbr_range)
-
-        los = np.arange(0 - skips, nflux - skips, dtype=np.int64)
-        los = np.clip(los, 0, nflux)
-        his = np.arange(skips, nflux + skips, dtype=np.int64)
-        his = np.clip(his, 0, nflux)
-
-
-        log.clock_stop(1)
-
-
-
-        for i in order:
-
-            if not neighbors_nz[i]:
-                continue
-
-            log.clock_start(2)
-
-            lo = find_lo(theta, i, los, his, crphi, skips)
-            hi = find_hi(theta, i, los, his, crphi, skips, nflux)
-
-            log.clock_stop(2)
-
-            lcrphi = crphi / np.sin(theta[i] + 1e-8)
-
-            log.clock_start(4)
-            neighbors = find_dist_nbrs(r, phi, i, lo, hi, lcrphi, critical)
-            log.clock_stop(4)
-
-            log.clock_start(5)
-            if len(neighbors) > 1:
-                ind_coalesce = rng.integers(len(neighbors))
-                flux = coalesce(ind_coalesce, neighbors, neighbors_nz, flux)
-
-            log.clock_stop(5)
-
-        log.clock_delta(1, "collide init: ")
-        log.clock_delta(2, "collide theta hi/lo search: ")
-        log.clock_delta(4, "collide real distance check: ")
-        log.clock_delta(5, "collide coalesce")
-
-        log.clock_reset(1)
-        log.clock_reset(2)
-        log.clock_reset(4)
-        log.clock_reset(5)
-
-        return self._collide_finish(phi, theta, flux, nflux)
+        return nnew

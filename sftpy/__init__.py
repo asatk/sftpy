@@ -128,5 +128,9 @@ class SimRC(MutableMapping, dict):
 
 simrc = SimRC()
 simrc.rc_from_files(["sftpy/config/params.ini", "sftpy/config/sft.ini"])
+
+# set global generator's seed
 rng = nprand.default_rng(seed=simrc["general.seed"])
+# nprand.set_state((simrc["general.seed"],))
+nprand.seed(simrc["general.seed"])
 
