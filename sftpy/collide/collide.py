@@ -18,6 +18,7 @@ from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
+from ..util import consolidate
 
 dt = rc["general.dt"]
 correction = rc["collide.correction"]
@@ -26,7 +27,8 @@ diffusion = rc["physics.diffusion"]
 loglvl = rc["component.loglvl"]
 
 
-@nb.njit(cache=True)
+
+@nb.jit(cache=True)
 def calculate_pos(theta, phi, nflux):
     sintheta = np.sin(theta[:nflux])
     x = sintheta * np.cos(phi[:nflux])
@@ -38,26 +40,8 @@ def calculate_pos(theta, phi, nflux):
 
 
 
-@nb.njit(cache=True)
-def consolidate(phi: np.ndarray,
-                theta: np.ndarray,
-                flux: np.ndarray,
-                nflux: int):
-
-    index = np.nonzero(flux[:nflux])[0]
-    nnew = len(index)
-    if nflux == nnew:
-        return nflux
-
-    phi[:nnew] = phi[index]
-    theta[:nnew] = theta[index]
-    flux[:nnew] = flux[index]
-
-    return nnew
-
-@nb.njit(cache=True)
+@nb.jit(cache=True)
 def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
-    # sorting is not the bottleneck
     sort_idx = np.argsort(theta[:nflux])
     phi[:nflux] = phi[sort_idx]
     theta[:nflux] = theta[sort_idx]
@@ -147,6 +131,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     return nnew
 
 
+
 class Collide(Component, metaclass=abc.ABCMeta):
     """
     Base class for flux concentration collision component of computation sequence.
@@ -159,7 +144,6 @@ class Collide(Component, metaclass=abc.ABCMeta):
                  correction: float=correction,
                  meanv: float=meanv,
                  diffusion: float=diffusion,    # TODO check if diff is in IDL code
-                 trackcancel: bool=False,
                  loglvl: int=loglvl):
 
         super().__init__(loglvl)
@@ -167,31 +151,11 @@ class Collide(Component, metaclass=abc.ABCMeta):
         self._corr = correction
         # TODO same constant as in charges/charges
         self._difu = diffusion
-        self._track = trackcancel
 
         # collision param from schrijver+ 1997 l=1400km^2/s
         self._radius = 1400 / meanv * correction
 
         self._crphi = self._radius / 7e5
-        self._critical = self._crphi ** 2 # collision distance in units of stellar radius squared
-
-    def _collide_start(self,
-                       phi: np.ndarray,
-                       theta: np.ndarray,
-                       flux: np.ndarray,
-                       nflux: int):
-        r = calculate_pos(theta, phi, nflux)
-        return r
-
-    def _collide_finish(self,
-                        phi: np.ndarray,
-                        theta: np.ndarray,
-                        flux: np.ndarray,
-                        nflux: int):
-
-        nnew = consolidate(phi, theta, flux, nflux)
-        self.log(2, f"spots remaining: {nnew}/{nflux}")
-        return nnew
 
     @abc.abstractmethod
     def collide(self,
@@ -204,6 +168,9 @@ class Collide(Component, metaclass=abc.ABCMeta):
 
 
 class COLNone(Collide):
+    """
+    No collisions between any flux spots.
+    """
 
     def collide(self,
                 phi: np.ndarray,
@@ -211,11 +178,12 @@ class COLNone(Collide):
                 flux: np.ndarray,
                 nflux: int):
 
-        if nflux <= 2:
+        if nflux < 2:
             return nflux
 
-        r = self._collide_start(phi, theta, flux, nflux)
-        return self._collide_finish(phi, theta, flux, nflux)
+        nnew = consolidate(phi, theta, nflux)
+        self.log(2, f"spots remaining: {nnew}/{nflux}")
+        return nnew
 
 
 
@@ -299,7 +267,7 @@ class COLScan(Collide):
 
 class COL1(Collide):
     """
-
+    Collide opposite-flux concentrations only.
     """
 
     def collide(self,
@@ -308,10 +276,10 @@ class COL1(Collide):
                 flux: np.ndarray,
                 nflux: int):
 
-        if nflux <= 2:
+        if nflux < 2:
             return nflux
 
-        r = self._collide_start(phi, theta, flux, nflux)
+        r = calculate_pos(theta, phi, nflux)
 
         # determine pos/neg concentrations
         indp = np.nonzero(np.sign(flux[:nflux]) == +1)[0]
@@ -326,7 +294,7 @@ class COL1(Collide):
         for i in indp:
 
             # determine neg neighbors to pos spot i
-            nbrs = np.sum(np.square(r[i] - rn), axis=1) < self._critical
+            nbrs = np.sum(np.square(r[i] - rn), axis=1) < self._crphi ** 2
 
             # shuffle list of spots to randomly determine one spot for all to
             # coalesce into and the others for removal
@@ -390,7 +358,14 @@ class COL1(Collide):
 
         """
 
-        return self._collide_finish(phi, theta, flux, nflux)
+        nnew = consolidate(phi, theta, flux, nflux)
+
+        self.log(2, f"spots remaining: {nnew}/{nflux}")
+
+        return nnew
+
+
+
 
 
 
@@ -402,9 +377,8 @@ class COL2(Collide):
                  correction: float = correction,
                  meanv: float = meanv,
                  diffusion: float = diffusion,  # TODO check if diff is in IDL code
-                 trackcancel: bool = False,
                  loglvl: int = loglvl):
-        super().__init__(dt, correction, meanv, diffusion, trackcancel, loglvl)
+        super().__init__(dt, correction, meanv, diffusion, loglvl)
         self._range = range
 
     @property
