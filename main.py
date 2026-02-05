@@ -87,9 +87,7 @@ def loop():
         dflow1.move(phi, theta, flux, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
-        logger.clock_start("col")
         nflux = collide.collide(phi, theta, flux, nflux)
-        logger.clock_check("col", "collide: ")
         nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()

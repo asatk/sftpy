@@ -1,9 +1,12 @@
 """
 These components encapsulate the behavior of a stellar activity cycle as
 determined from observations and empirical relationships.
+
+Migrated from cyclestrength.pro
 """
 
 import abc
+import numba as nb
 import numpy as np
 
 from sftpy import simrc as rc
@@ -93,6 +96,41 @@ class CYC0(Cycle):
         return source, latsource
 
 
+# @nb.jit(cache=True)
+def cycle_12(time, pd, ovr, peak, mult, latlo, lathi):
+
+    amax = 2 * np.pi * peak / (pd + 2 * ovr)
+    a = np.full(2, amax / peak, dtype=np.float64)
+    a[0] *= np.mod(time + pd, pd)
+    a[1] *= np.mod(time + pd / 2, pd)
+
+    if ovr < 0.01:
+        b = 5
+        c = 5.81
+    elif np.abs(ovr - 2) < 0.01:
+        b = 8
+        c = 8.39
+    else:
+        b = (amax * np.cos(amax) + np.sin(amax)) / \
+                (2 * np.sin(amax) * amax**2) * np.pi**2
+        c = amax * np.exp(-(amax / np.pi)**2 * b) / np.pi / \
+                max(np.sin(amax), 0)
+
+    # clipped sin
+    sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
+
+    # flagged sin
+    sin_flag = (np.sin(a) > 0) + 0
+
+    source = np.array([1, -1]) * sin_clip * mult * a / np.pi * \
+            np.exp(-(a / np.pi)**2 * b) * c
+    latsource = (lathi - (lathi - latlo) * a / np.pi) * sin_flag
+
+    return source, latsource
+
+
+
+
 class CYC1(Cycle):
     """
     Schrijver cycle mode 1: fixed-amplitude activity cycle
@@ -104,33 +142,8 @@ class CYC1(Cycle):
 
         time = self._timestep.gettime()
 
-        a = np.full(2, 2 * np.pi / (self._pd + 2 * self._ovr), dtype=np.float64)
-        a[0] *= np.mod(time + self._pd, self._pd)
-        a[1] *= np.mod(time + self._pd / 2, self._pd)
-
-        if self._ovr < 0.01:
-            b = 5
-            c = 5.81
-        elif np.abs(self._ovr - 2) < 0.01:
-            b = 8
-            c = 8.39
-        else:
-            a[0] = 2 * np.pi * self._peak / (self._pd + 2 * self._ovr)
-            b = (a[0] * np.cos(a[0]) + np.sin(a[0])) / \
-                    (2 * np.sin(a[0]) * a[0]**2) * np.pi**2
-            c = a[0] * np.exp(-(a[0] / np.pi)**2 * b) / np.pi / \
-                    np.clip(np.sin(a[0]), a_min=0, a_max=None)
-
-        # clipped sin
-        # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
-
-        # flagged sin
-        sin_flag = (np.sin(a) > 0) + 0
-
-        source = np.array([1, -1]) * sin_flag * self._mult * a / np.pi * \
-                np.exp(-(a / np.pi)**2 * b) * c
-        latsource = (self._lathi - (self._lathi - self._latlo) * a / np.pi) * sin_flag
-        self.log(1, f"latsource {latsource}")
+        source, latsource = cycle_12(time, self._pd, self._ovr, self._peak,
+                                     self._mult, self._latlo, self._lathi)
 
         return source, latsource
 
@@ -146,32 +159,8 @@ class CYC2(Cycle):
 
         time = self._timestep.gettime()
 
-        a = np.full(2, 2 * np.pi / (self._pd + 2 * self._ovr), dtype=np.float64)
-        a[0] *= np.mod(time + self._pd, self._pd)
-        a[1] *= np.mod(time + self._pd / 2, self._pd)
-
-        if self._ovr < 0.01:
-            b = 5
-            c = 5.81
-        elif np.abs(self._ovr - 2) < 0.01:
-            b = 8
-            c = 8.39
-        else:
-            a[0] = 2 * np.pi * self._peak / (self._pd + 2 * self._ovr)
-            b = (a[0] * np.cos(a[0]) + np.sin(a[0])) / \
-                    (2 * np.sin(a[0]) * a[0]**2) * np.pi**2
-            c = a[0] * np.exp(-(a[0] / np.pi)**2 * b) / np.pi / \
-                    np.clip(np.sin(a[0]), a_min=0, a_max=None)
-
-        # clipped sin
-        # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
-
-        # flagged sin
-        sin_flag = (np.sin(a) > 0) + 0
-
-        source = np.array([1, -1]) * sin_flag * self._mult * a / np.pi * \
-                np.exp(-(a / np.pi)**2 * b) * c
-        latsource = (self._lathi - (self._lathi - self._latlo) * a / np.pi) * sin_flag
+        source, latsource = cycle_12(time, self._pd, self._ovr, self._peak,
+                                     self._mult, self._latlo, self._lathi)
 
         # TODO yearssn
         source *= yearssn(time, yssn, ssn)
