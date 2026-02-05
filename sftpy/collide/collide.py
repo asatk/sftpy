@@ -74,12 +74,9 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     r = np.stack(l, axis=1)
 
     los = np.arange(0 - skips, nflux - skips, dtype=np.int64)
-    los = np.clip(los, 0, nflux)
+    los = np.mod(los, nflux)
     his = np.arange(skips, nflux + skips, dtype=np.int64)
-    his = np.clip(his, 0, nflux)
-
-    # TODO the clips are in there b/c numba doesn't seem to like handling negative or oob indices
-    # check the lo and hi calcs
+    his = np.mod(his, nflux)
 
     for i in order:
 
@@ -92,6 +89,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
             lo = lo - skips
             if lo < 0:
                 thetalo += 2 * np.pi
+                lo += nflux
 
         his[lo] = i
 
@@ -106,7 +104,11 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
         los[hi] = i
 
         lcrphi = crphi / sintheta[i]
-        neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
+        # this won't work if lo > hi
+        if lo > hi:
+            neighbors_theta = np.arange(lo, hi + nflux + 1, dtype=np.int64)
+        else:
+            neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
 
         phi_diff = phi[i] - phi[neighbors_theta]
         phi_dist = np.abs(phi_diff)
