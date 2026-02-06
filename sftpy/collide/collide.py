@@ -42,18 +42,18 @@ def calculate_pos(theta, phi, nflux):
 
 @nb.jit(cache=True)
 def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
-    sort_idx = np.argsort(theta[:nflux])
-    phi[:nflux] = phi[sort_idx]
-    theta[:nflux] = theta[sort_idx]
-    flux[:nflux] = flux[sort_idx]
+    sort_idx = np.argsort(theta)
+    phi[:] = phi[sort_idx]
+    theta[:] = theta[sort_idx]
+    flux[:] = flux[sort_idx]
 
-    neighbors_nz = flux[:nflux] != 0
+    neighbors_nz = flux != 0
 
     # r = calculate_pos(phi, theta, nflux)
-    sintheta = np.sin(theta[:nflux])
-    x = sintheta * np.cos(phi[:nflux])
-    y = sintheta * np.sin(phi[:nflux])
-    z = np.cos(theta[:nflux])
+    sintheta = np.sin(theta)
+    x = sintheta * np.cos(phi)
+    y = sintheta * np.sin(phi)
+    z = np.cos(theta)
     l = (x, y, z)
     r = np.stack(l, axis=1)
 
@@ -62,6 +62,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     his = np.arange(skips, nflux + skips, dtype=np.int64)
     his = np.mod(his, nflux)
 
+    # calculate finding neighbors in parallel and coalesce sequentially?
     for i in order:
 
         if not neighbors_nz[i]:
@@ -91,6 +92,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
         # this won't work if lo > hi
         if lo > hi:
             neighbors_theta = np.arange(lo, hi + nflux + 1, dtype=np.int64)
+            neighbors_theta = np.mod(neighbors_theta, nflux)
         else:
             neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
 
@@ -107,7 +109,6 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
         n_neighbors = len(neighbors)
         if n_neighbors > 1:
             np.random.seed(seeds[i])
-
             ind_coalesce = np.random.randint(len(neighbors))
             nbr_coalesce = neighbors[ind_coalesce]
 
@@ -121,14 +122,22 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
 
     index = np.nonzero(flux[:nflux])[0]
     nnew = len(index)
-    if nflux == nnew:
-        return nflux
 
-    phi[:nnew] = phi[index]
-    theta[:nnew] = theta[index]
-    flux[:nnew] = flux[index]
+    if nnew < nflux:
+        phi[:nnew] = phi[index]
+        theta[:nnew] = theta[index]
+        flux[:nnew] = flux[index]
+        flux[nnew:] = 0
 
-    return nnew
+    phi_r = phi[:nnew]
+    theta_r = theta[:nnew]
+    flux_r = flux[:nnew]
+
+    l_ret = (phi_r, theta_r, flux_r)
+    # arr_ret = np.stack(l_ret)
+    # return arr_ret
+
+    return l_ret
 
 
 
@@ -394,13 +403,25 @@ class COL2(Collide):
         if nflux < 2:
             return nflux
 
-        skips = self._range
+        skips = min(self._range, nflux)
         # skips = nflux // 1000 + 1
         crphi = self._crphi
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
-        seeds = rng.integers(low=2 ** 64 - 1, size=nflux, dtype=np.uint64)
+        seeds = rng.integers(low=2 ** 32 - 1, size=nflux, dtype=np.uint32)
 
-        nnew = collide2(phi, theta, flux, nflux, skips, crphi, order, seeds)
+        phi_c = phi[:nflux].copy()
+        theta_c = theta[:nflux].copy()
+        flux_c = flux[:nflux].copy()
+
+        # arr = collide2(phi_c, theta_c, flux_c, nflux, skips, crphi, order, seeds)
+        # nnew = arr.shape[-1]
+        # phi_r, theta_r, flux_r = np.unstack(arr)
+        phi_r, theta_r, flux_r = collide2(phi_c, theta_c, flux_c, nflux, skips, crphi, order, seeds)
+        nnew = phi_r.shape[0]
+
+        phi[:nnew] = phi_r.copy()
+        theta[:nnew] = theta_r.copy()
+        flux[:nnew] = flux_r.copy()
 
         self.log(2, f"spots remaining: {nnew}/{nflux}")
 

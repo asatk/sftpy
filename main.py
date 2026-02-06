@@ -56,7 +56,7 @@ def loop():
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL2(loglvl=2)
+    collide = COL2(loglvl=0)
     fragment = Fragment(rwalk_frag)
     bmr = BMRSchrijver(nfluxmax, loglvl=0)
 
@@ -74,7 +74,12 @@ def loop():
     for i in range(1, nstep):
 
         time.step()
-        logger.log(1, f"[{i}] t = {time/86400/365:.02g} yr")
+        if i % savestep == 0:
+            lognum = loglvl
+        else:
+            lognum = loglvl + 1
+
+        logger.log(lognum, f"[{i}] t = {time/86400/365:.02g} yr")
         logger.clock_start("iter")
 
         nflux = decay.decay(phi, theta, flux, nflux)
@@ -98,18 +103,15 @@ def loop():
         if i % savestep == 0:
             synoptic_save = synoptic_map(phi, theta, flux, nflux)
             synoptic_all[i//savestep] = synoptic_save
+            logger.clock_check("iter", f"[{i}]")
             logger.clock_check("sim", "Simulation elapsed time: ")
 
-
-        logger.log(1, f"nflux {nflux}")
+        logger.log(lognum, f"nflux {nflux}")
 
         # logger.plot(1, "imshow", synoptic.T)
         if loglvl >= 2:
             plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
                      f"({time/86400:.01f} d)", show=True)
-
-        logger.clock_check("iter", f"[{i}]")
-
 
     '''
         """

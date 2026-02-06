@@ -140,7 +140,8 @@ class CYC1(Cycle):
 
     def cycle(self):
 
-        time = self._timestep.gettime()
+        # time from seconds to years
+        time = self._timestep.gettime() / 86400 / 365
 
         source, latsource = cycle_12(time, self._pd, self._ovr, self._peak,
                                      self._mult, self._latlo, self._lathi)
@@ -157,6 +158,7 @@ class CYC2(Cycle):
 
     def cycle(self):
 
+        # time from seconds to years
         time = self._timestep.gettime()
 
         source, latsource = cycle_12(time, self._pd, self._ovr, self._peak,

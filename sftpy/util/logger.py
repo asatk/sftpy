@@ -16,6 +16,14 @@ class Logger:
         self._clock_stops = {}
         self._clock_deltas = {}
 
+    @property
+    def level(self):
+        return self._level
+
+    @level.setter
+    def level(self, level: int):
+        self._level = level
+
     def log(self, level: int, msg: str):
         if level <= self._level:
             print(f"{self._prefix} -- {msg}")
