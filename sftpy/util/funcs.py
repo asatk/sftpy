@@ -32,3 +32,13 @@ def smooth(arr: np.ndarray, width: int) -> np.ndarray:
     kernel = np.full(width, 1. / width)
     a[lo:hi] = np.convolve(a, kernel, mode='valid')
     return a
+
+def powerlaw_rv(ntotal: int, p: float, lo: float, hi: float, rng):
+
+    # ks-test determined the IDL sampler and true power-law dists are not identical...
+    # sampling via inverse method
+    pp1 = p + 1
+    urv = rng.uniform(size=ntotal)
+    rv = (((hi ** pp1 - lo ** pp1) * urv) + lo ** pp1) ** (1 / pp1)
+
+    return rv

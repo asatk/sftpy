@@ -4,12 +4,12 @@
 
 import abc
 import numpy as np
-from scipy.stats import truncpareto
 
 from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
+from ..util import powerlaw_rv
 from ..util.other import tiltmatrix, phithetaxyz
 
 binflux= rc["physics.binflux"]
@@ -64,6 +64,7 @@ class BMREmerge(Component, metaclass=abc.ABCMeta):
         ...
 
 
+
 class BMRNone(BMREmerge):
 
     def emerge(self,
@@ -75,6 +76,7 @@ class BMRNone(BMREmerge):
                latsource: np.ndarray,
                synoptic: np.ndarray):
         return phi, theta, flux, nflux
+
 
 
 class BMRAssimilate(BMREmerge):
@@ -102,6 +104,51 @@ class BMRAssimilate(BMREmerge):
 
 
 
+# TODO specified sources injection (pre step 1)
+# if sources are specified, set variables and inject sources
+"""
+    if specified is not None:
+        newflux = np.round(specified[:,0]).astype(np.int64)
+        newphi = specified[:,1]
+        newtheta = specified[:,2]
+        ntotal = specified.shape[0]
+        orient = np.full(ntotal, joy * np.pi / 180, dtype=np.float64)
+        hemi_south = newtheta > np.pi / 2
+        orient[hemi_south] = np.pi - orient[hemi_south]
+        # assume the orientation of the largest cycle for the new regions
+        orient += np.pi * np.all(source < 0)
+
+        # inject sources
+"""
+
+# TODO pre step 3
+"""
+# assimilating
+# remove sources from within radassim deg of the magnetrograph
+# subobservation point
+if assimilation:
+    l0 = 0.0
+    b0 = 0.0
+
+    # TODO find default value for this... not in SFT Documentation
+    # nor in code... just an update comment in addsources.pro
+    radassim = 60.0
+
+    xe, ye, ze = phithetaxyz(newphi + l0, newtheta, ntotal)
+    pos = tiltmatrix(b0) @ np.array([[xe], [ye], [ze]])
+    # shouldn't this be squared? sq. deg?
+    edge = np.sin(radassim * np.pi / 180)
+    ind = ((pos[:, 1] ** 2 + pos[:, 2] ** 2) < edge) & (pos[:, 0] > 0)
+    # set source fluxes to zero if within assimilated region, then remove
+    newflux[ind] = 0
+
+    newflux = newflux[~ind]
+    newphi = newphi[~ind]
+    newtheta = newtheta[~ind]
+    ntotal = len(newflux)
+"""
+
+
 class BMRSchrijver(BMREmerge):
     """
     Component for BMR emergence according to CJS empirical recipes
@@ -112,17 +159,11 @@ class BMRSchrijver(BMREmerge):
     def __init__(self,
                  dt: float=dt,
                  nfluxmax: int=nfluxmax,
-                 specified=None,
                  as_specified: bool=True,
-                 initialize: bool=False,
-                 assimilation: bool=False,
                  gradual: bool=False,
                  loglvl: int=loglvl):
         super().__init__(dt, nfluxmax, loglvl)
-        self._specified = specified
-        self._as_specified = as_specified
-        self._initialize = initialize
-        self._assimilation = assimilation
+        self._as_specified = as_specified   # fast forward/ no ER/ not full res
         self._gradual = gradual
 
     def emerge(self,
@@ -135,44 +176,18 @@ class BMRSchrijver(BMREmerge):
                synoptic: np.ndarray):
 
         dt = self._dt
-        specified = self._specified
         as_specified = self._as_specified
-        initialize = self._initialize
-        assimilation = self._assimilation
         gradual = self._gradual
 
         # track total flux added in timestep
-        sourceinput = 0.0
-
-        # skip this -- separate initialization
-        # if initialize:
-        #     newflux = float(maxflux)
-        #     ntotal = 1
-        #     newphi = 0.0
-        #     newtheta = np.pi / 180 * (90 - latsource[0])
-        #     orient = joy * np.pi / 180
-        #     # goto specified sources -- inject initial sources
+        # sourceinput = 0.0
 
         # TODO what can we vectorize / pull out of loop?
         for i in range(len(source)):
 
-            # if sources are specified, set variables and inject sources
-            if specified is not None:
-                newflux = np.round(specified[:,0]).astype(np.int64)
-                newphi = specified[:,1]
-                newtheta = specified[:,2]
-                ntotal = specified.shape[0]
-                orient = np.full(ntotal, joy * np.pi / 180, dtype=np.float64)
-                hemi_south = newtheta > np.pi / 2
-                orient[hemi_south] = np.pi - orient[hemi_south]
-                # assume the orientation of the largest cycle for the new regions
-                orient += np.pi * np.all(source < 0)
-
-                # TODO skip to inject sources
-
             # cycle strength is negligible; inject no new sources
-            if np.abs(source[i]) < 1e-5:
-                continue
+            # if np.abs(source[i]) < 1e-5:
+            #     continue
 
 
 
@@ -192,7 +207,8 @@ class BMRSchrijver(BMREmerge):
             frac = ntotal1 - int(ntotal1)
             ntotal1 = int(ntotal1) + (rng.uniform() < frac)
 
-            newflux1 = self.new_bipole_fluxes(ntotal1, p, binflux, minflux, maxflux, rng)
+            rv1 = powerlaw_rv(ntotal1, -p, minflux / binflux, maxflux / binflux, rng)
+            newflux1 = np.astype(rv1, np.int64)
 
 
             ## [2] Low-flux tail dominated by ephemeral regions
@@ -206,7 +222,8 @@ class BMRSchrijver(BMREmerge):
             frac = ntotal2 - int(ntotal2)
             ntotal2 = int(ntotal2) + (rng.uniform() < frac)
 
-            newflux2 = self.new_bipole_fluxes(ntotal2, p, binflux, minflux, maxflux, rng)
+            rv2 = powerlaw_rv(ntotal2, -p, minflux / binflux, maxflux / binflux, rng)
+            newflux2 = np.astype(rv2, np.int64)
 
             newflux = np.r_[newflux1, newflux2]
             ntotal = len(newflux)
@@ -312,30 +329,7 @@ class BMRSchrijver(BMREmerge):
                 else:
                     self.log(3, "NEST no nests")
                 
-            # assimilating
-            # remove sources from within radassim deg of the magnetrograph
-            # subobservation point
-            no_data_assimilated = True
-            if assimilation and not no_data_assimilated:
-                l0 = 0.0
-                b0 = 0.0
 
-                # TODO find default value for this... not in SFT Documentation
-                # nor in code... just an update comment in addsources.pro
-                radassim = 60.0
-
-                xe, ye, ze = phithetaxyz(newphi+l0, newtheta, ntotal)
-                pos = tiltmatrix(b0) @ np.array([[xe], [ye], [ze]])
-                # shouldn't this be squared? sq. deg?
-                edge = np.sin(radassim * np.pi / 180)
-                ind = ((pos[:,1]**2 + pos[:,2]**2) < edge) & (pos[:,0] > 0)
-                # set source fluxes to zero if within assimilated region, then remove
-                newflux[ind] = 0
-
-                newflux = newflux[~ind]
-                newphi = newphi[~ind]
-                newtheta = newtheta[~ind]
-                ntotal = len(newflux)
 
 
 
@@ -353,8 +347,6 @@ class BMRSchrijver(BMREmerge):
             self.plot(3, "show")
 
 
-
-            # SPECIFIED SOURCES
 
             # Step 4 --- position concentrations
             r = (np.sqrt(binflux * newflux * 1.e18 / avefluxd / np.pi) + 7.e8) / 7.e10
@@ -541,26 +533,9 @@ class BMRSchrijver(BMREmerge):
             theta[nflux:nflux+2*nadd_tot] = atheta
             flux[nflux:nflux+2*nadd_tot] = aflux
 
-            sourceinput += 2.0 * np.sum(np.fabs(newflux))
             nflux += nadd_tot * 2
 
             self.log(1, f"add {nadd_tot}")
 
 
         return phi, theta, flux, nflux
-
-
-
-    def new_bipole_fluxes(self, ntotal: int, p: float, binflux: float,
-                          minflux: float, maxflux: float, rng):
-
-        # ks-test determined the IDL sampler and true power-law dists are not identical...
-        # sampling via inverse method
-        hi = maxflux / binflux
-        lo = minflux / binflux
-        pp1 = -p + 1
-        urv = rng.uniform(size=ntotal)
-        samps = (((hi ** pp1 - lo ** pp1) * urv) + lo ** pp1) ** (1 / pp1)
-        samps = np.astype(samps, np.int64)
-
-        return samps
