@@ -16,6 +16,7 @@ from sftpy.emerge import BMRSchrijver
 from sftpy.fragment import Fragment
 from sftpy.initialize import InitTwo
 from sftpy.mflow import MF2
+from sftpy.misc.carrington import CarringtonRotation
 from sftpy.rwalk import RW0, RW2
 
 from sftpy.misc import WrapPhi, WrapTheta
@@ -47,6 +48,7 @@ def loop():
     time = Timestep()
     pwrap = WrapPhi()
     twrap = WrapTheta()
+    crot = CarringtonRotation(dt)
     cycle = CYC1(time)
     rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
     ini = InitTwo(nfluxmax)
@@ -90,6 +92,7 @@ def loop():
         dflow2.move(phi, theta, flux, nflux)
         mflow.move(theta, nflux)
         dflow1.move(phi, theta, flux, nflux)
+        crot.move(phi, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
         nflux = collide.collide(phi, theta, flux, nflux)

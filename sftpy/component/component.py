@@ -23,6 +23,7 @@ class Component(metaclass=abc.ABCMeta):
         """
         Initialize the component with a maximum log level of `loglvl`.
         """
+        self._loglvl = loglvl
         self._log = Logger(loglvl, self.prefix)
 
     def log(self, loglvl: int, msg: str):

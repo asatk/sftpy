@@ -71,7 +71,7 @@ class MF2(MeridionalFlow):
                  dt: float=dt,
                  mer_mult: float=mer_mult,
                  loglvl: int=loglvl):
-        super().__init__(dt)
+        super().__init__(dt, mer_mult, loglvl)
         self._a = 12.7e-3 * dt / 7.e5 * mer_mult
 
     def move(self,

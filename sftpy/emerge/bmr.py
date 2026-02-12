@@ -4,12 +4,13 @@
 
 import abc
 import numpy as np
+from scipy.stats import truncpareto
 
 from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
-
+from ..util.other import tiltmatrix, phithetaxyz
 
 binflux= rc["physics.binflux"]
 nfluxmax = rc["general.nfluxmax"]
@@ -140,38 +141,46 @@ class BMRSchrijver(BMREmerge):
         assimilation = self._assimilation
         gradual = self._gradual
 
-        # TODO figure out use of sourceinput: "total absolute flux added"
+        # track total flux added in timestep
         sourceinput = 0.0
 
-        # TODO place outside of add_sources
-
-        if initialize:
-            newflux = float(maxflux)
-            ntotal = 1
-            newphi = 0.0
-            newtheta = np.pi / 180 * (90 - latsource[0])
-            orient = joy * np.pi / 180
-            # goto specified sources
+        # skip this -- separate initialization
+        # if initialize:
+        #     newflux = float(maxflux)
+        #     ntotal = 1
+        #     newphi = 0.0
+        #     newtheta = np.pi / 180 * (90 - latsource[0])
+        #     orient = joy * np.pi / 180
+        #     # goto specified sources -- inject initial sources
 
         # TODO what can we vectorize / pull out of loop?
         for i in range(len(source)):
+
+            # if sources are specified, set variables and inject sources
             if specified is not None:
-                newflux = specified[:,0]
+                newflux = np.round(specified[:,0]).astype(np.int64)
                 newphi = specified[:,1]
                 newtheta = specified[:,2]
                 ntotal = specified.shape[0]
                 orient = np.full(ntotal, joy * np.pi / 180, dtype=np.float64)
                 hemi_south = newtheta > np.pi / 2
-                orient[hemi_south] = -orient[hemi_south] + np.pi
-                orient += (np.max(source) < 0) * np.pi
-                #print
-                # goto specified sources
-            
-            if np.fabs(source[i] < 1e-5):
+                orient[hemi_south] = np.pi - orient[hemi_south]
+                # assume the orientation of the largest cycle for the new regions
+                orient += np.pi * np.all(source < 0)
+
+                # TODO skip to inject sources
+
+            # cycle strength is negligible; inject no new sources
+            if np.abs(source[i]) < 1e-5:
                 continue
 
+
+
+            # Step 1 --- determine size distribution
+
+            ## [1] High-flux tail dominant for large regions
             a = 8.0
-            a *= np.fabs(source[i])
+            a *= np.abs(source[i])
             p = psource
 
 
@@ -185,8 +194,10 @@ class BMRSchrijver(BMREmerge):
 
             newflux1 = self.new_bipole_fluxes(ntotal1, p, binflux, minflux, maxflux, rng)
 
+
+            ## [2] Low-flux tail dominated by ephemeral regions
             a = 8.0
-            a *= np.fabs(source[i])**(1.0/3) * turbulent + (1 - turbulent)
+            a *= np.abs(source[i])**(1.0/3) * turbulent + (1 - turbulent)
             p = psource + 1
             scale = 1. / ((1.0 - p) * 1.5 ** (1.0 - p) * avefluxd ** (1.0 - p))
             rangefactor = maxflux ** (1.0 - p) - (miniflux * 2) ** (1.0 - p)
@@ -214,6 +225,8 @@ class BMRSchrijver(BMREmerge):
 
             # TODO -- this mode emerges nothing...
             # accelerated-time mode; leave out ephemeral regions
+            # regions that are 2 sq deg or larger, i.e.,
+            # 2*1.5e18*avefluxd/1e18 = 3 avefluxd units of 1e18
             if not as_specified and cyl_mult > 1e-5:
                 self.log(2, f"NEWFLUX {newflux}")
                 index = newflux > (3 * avefluxd / binflux)
@@ -223,6 +236,7 @@ class BMRSchrijver(BMREmerge):
                 newflux = newflux[index]
                 ntotal = len(newflux)
 
+            # testrun mode -- include only ephemeral regions
             if cyl_mult < -1e-5:
                 index = newflux < (3 * avefluxd / binflux)
                 if not np.any(index):
@@ -230,7 +244,9 @@ class BMRSchrijver(BMREmerge):
                 newflux = newflux[index]
                 ntotal = len(newflux)
 
-            # step 2 -- determine positions
+
+
+            # Step 2 --- determine positions
             self.log(1, f"latsource = {latsource[i]}")
             newphi = rng.uniform(high=2*np.pi, size=ntotal)
             newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
@@ -246,13 +262,18 @@ class BMRSchrijver(BMREmerge):
             self.plot(3, "show")
 
             # nesting
-            nesting = 1.5 * avefluxd * 1.47562 / 2 / binflux
+            # ~40% of activate regions emerge inside existing regions.
+            # applied to all regions larger than 2.5 sq deg (factor 2 for 2 pol)
+            nesting = 2.5 * avefluxd * 1.47562 / 2 / binflux
             ind_nest = np.nonzero(newflux >= nesting)[0]
             nnest = len(ind_nest)
             if nnest > 0:
+                # pick nest regions from set of sufficiently large regions
                 ind_pick = rng.uniform(size=nnest) < 0.4
                 npick = np.sum(ind_pick)
 
+                # pick new location inside plage regions but not at polar caps
+                # limits emergence to lat +/- deg
                 if npick > 0:
                     ind_nest_picks = ind_nest[ind_pick]
                     self.log(2, f"nnest={nnest}   npick={npick}")
@@ -260,9 +281,14 @@ class BMRSchrijver(BMREmerge):
                     self.log(2, f"ind_pick {ind_pick}")
                     self.log(2, f"ind_nest_pick {ind_nest_picks}")
 
-                    xx = np.zeros(180, dtype=np.byte)
-                    xx[21:180-21] = 1
-                    yy = np.ones(360, dtype=np.byte)
+                    thetabins = 180
+                    phibins = 360
+
+                    thetalim = np.int64(np.sin(50 * np.pi / 180) * thetabins / 2) + 1
+
+                    xx = np.zeros(thetabins, dtype=np.byte)
+                    xx[thetalim:thetabins-thetalim] = 1
+                    yy = np.ones(phibins, dtype=np.byte)
                     # TODO check this matmult
                     # ind = (synoptic * np.outer(yy, xx)) != 0
                     ind = np.nonzero(np.ravel((synoptic * np.outer(yy, xx))))[0]
@@ -272,73 +298,76 @@ class BMRSchrijver(BMREmerge):
                         nreplace = min(npick, nind)
                         self.log(3, f"NEST nreplace = {nreplace}")
                         point = rng.choice(ind, replace=False, size=nreplace)
-                        lat = point / 360
+                        lat = point / phibins
 
                         # TODO check the  +1 on these
                         self.log(3, f"NEST point = {point.shape}")
                         self.log(3, f"NEST lat = {lat.shape}")
                         self.log(3, f"NEST ind_nest_picks = {ind_nest_picks.shape}")
                         self.log(3, f"NEST new_phi = {newphi.shape}")
-                        newphi[ind_nest_picks[:nreplace+1]] = point - 360 * lat
-                        newtheta[ind_nest_picks[:nreplace+1]] = np.pi / 2 - np.arcsin(lat / 90 - 1)
+                        newphi[ind_nest_picks[:nreplace+1]] = point - phibins * lat
+                        newtheta[ind_nest_picks[:nreplace+1]] = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
                     else:
                         self.log(3, "NEST no nests")
-                        # goto nonests
-                        pass
                 else:
                     self.log(3, "NEST no nests")
-                    # goto nonests
-                    pass
                 
             # assimilating
-            no_data_assimilated = False
+            # remove sources from within radassim deg of the magnetrograph
+            # subobservation point
+            no_data_assimilated = True
             if assimilation and not no_data_assimilated:
+                l0 = 0.0
+                b0 = 0.0
 
-                if l0 is None:
-                    l0 = 0.0
+                # TODO find default value for this... not in SFT Documentation
+                # nor in code... just an update comment in addsources.pro
+                radassim = 60.0
 
-                if b0 is None:
-                    b0 = 0.0
-
-                # TODO phithetaxyz
-                xe, ye, ze = phithetaxyz(newphi+l0, newtheta)
-                # TODO tiltmatrix
-                # TODO check this mtx mult w/ desired outcome from IDL
-                pos = tiltmatrix(b0) @ np.array([[xe], [ye], [ze]]).T
+                xe, ye, ze = phithetaxyz(newphi+l0, newtheta, ntotal)
+                pos = tiltmatrix(b0) @ np.array([[xe], [ye], [ze]])
+                # shouldn't this be squared? sq. deg?
                 edge = np.sin(radassim * np.pi / 180)
-                ind = ((pos[:,1]**2 + pos[:,2]**2) < edge) and pos[:,0] > 0
-                if np.any(ind):
-                    newflux[ind] = 0
+                ind = ((pos[:,1]**2 + pos[:,2]**2) < edge) & (pos[:,0] > 0)
+                # set source fluxes to zero if within assimilated region, then remove
+                newflux[ind] = 0
 
-                ind = newflux != 0
-                newflux = newflux[ind]
-                newphi = newphi[ind]
-                newtheta = newtheta[ind]
+                newflux = newflux[~ind]
+                newphi = newphi[~ind]
+                newtheta = newtheta[~ind]
                 ntotal = len(newflux)
-            
-            # step 3 -- orientation of bipole axes
+
+
+
+            # Step 3 --- orientation of bipole axes
             width = joy_width * np.exp(-binflux * newflux / joy_fold) + sjzero
             orient = rng.normal(loc=joy, scale=width, size=ntotal) * np.pi / 180
-            orient[newtheta > np.pi / 2] = np.pi - orient[newtheta > np.pi / 2]
-            orient += (source[i] < 0) * np.pi
+            # flip sign for opposite polarity regions
+            ind_pol = newtheta > (np.pi / 2)
+            orient[ind_pol] = np.pi - orient[ind_pol]
+            orient += np.pi * (source[i] < 0)
 
             self.log(1, f"joy = {joy}   joy_width = {joy_width}    joy_fold {joy_fold}")
             self.plot(3, "hist", orient, bins=15)
             self.plot(3, "title", "Orient")
             self.plot(3, "show")
 
+
+
             # SPECIFIED SOURCES
 
-            # step 4 -- position concentrations
+            # Step 4 --- position concentrations
             r = (np.sqrt(binflux * newflux * 1.e18 / avefluxd / np.pi) + 7.e8) / 7.e10
             self.log(3, "separation")
             self.plot(3, "hist", r)
             self.plot(3, "title", "Separation r")
             self.plot(3, "show")
+            # impose minimum separation of ~0.5 supergranulation of 18Mm
             sep = np.clip(r, a_min=9000./7.e5/2, a_max=None)
-            percon = np.astype(np.clip(newflux / 3., a_min=1, a_max=None), 
-                               np.int64)
-            percon[newflux > 3 * 15. / binflux] = 15. / binflux
+            # number of new concentrations that contain 15e18 Mx w/ at least
+            # three equal concentrations per polarity
+            percon = np.clip(newflux / 3, a_min=1, a_max=None).astype(np.int64)
+            percon[newflux > 3 * 15 / binflux] = 15 / binflux
 
             bulk = np.clip(newflux // percon, a_min=1, a_max=None)
             rest = np.clip(newflux - percon * bulk, a_min=0, a_max=None)
@@ -390,7 +419,7 @@ class BMRSchrijver(BMREmerge):
             y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
             z = costheta - xo * sintheta
 
-            if self._log._level >= 3:
+            if self._loglvl >= 7:
                 from matplotlib import pyplot as plt
                 fig = plt.figure()
                 ax = fig.add_subplot(projection="3d")
@@ -518,45 +547,20 @@ class BMRSchrijver(BMREmerge):
             self.log(1, f"add {nadd_tot}")
 
 
-        # return sourceinput?
         return phi, theta, flux, nflux
 
-    def new_bipole_fluxes(self, ntotal: int, p: float, binflux: float, minflux: float,
-                          maxflux: float, rng):
 
-        newflux = np.zeros(ntotal, dtype=np.int64)
-        if ntotal == 0:
-            return newflux
 
-        ep = 1 / (1.0 - p)
-        bf2 = binflux * 2
-        mbinflux = maxflux / binflux
+    def new_bipole_fluxes(self, ntotal: int, p: float, binflux: float,
+                          minflux: float, maxflux: float, rng):
 
-        newvals = np.astype((p * rng.uniform(size=ntotal) ** ep + 0.5) / bf2,
-                            np.int64)
+        # ks-test determined the IDL sampler and true power-law dists are not identical...
+        # sampling via inverse method
+        hi = maxflux / binflux
+        lo = minflux / binflux
+        pp1 = -p + 1
+        urv = rng.uniform(size=ntotal)
+        samps = (((hi ** pp1 - lo ** pp1) * urv) + lo ** pp1) ** (1 / pp1)
+        samps = np.astype(samps, np.int64)
 
-        notvalid = (newvals < minflux) | (newvals >= mbinflux)
-
-        self.log(5, newvals)
-        self.log(5, f"newvals stats: mean {np.mean(newvals)}" + \
-                f"   median {np.median(newvals)}   sd {np.std(newvals)}")
-        self.plot(5, "hist", newvals, bins=25)
-        self.plot(5, "title", "newvals")
-        self.plot(5, "show")
-
-        while np.any(notvalid):
-            nreplace = np.sum(notvalid)
-            replacevals = np.astype((p * rng.uniform(size=nreplace) ** ep + 0.5) / bf2,
-                                    np.int64)
-            newvals[notvalid] = replacevals
-            notvalid = (newvals < minflux) | (newvals >= mbinflux)
-
-            self.log(4, f"nreplace {nreplace}")
-            self.log(5, newvals)
-            self.log(5, f"newvals stats: mean {np.mean(newvals)}" + \
-                    f"   median {np.median(newvals)}   sd {np.std(newvals)}")
-            self.plot(5, "hist", newvals, bins=25)
-            self.plot(5, "title", "newvals")
-            self.plot(5, "show")
-
-        return newvals
+        return samps

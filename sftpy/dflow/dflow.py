@@ -19,6 +19,9 @@ cyclepol = rc["dflow.cyclepol"]
 loglvl = rc["component.loglvl"]
 thr = rc["dflow.DF4.thr"]
 
+# prot = 14.255984    # deg/day -> 25.25 day/360deg rotation
+prot = 360.0 / 24.47    # deg/day -> 24.47 day/rotation
+
 class DifferentialFlow(Component, metaclass=abc.ABCMeta):
     """
     Base class for differential flow component of computation sequence.
@@ -109,12 +112,13 @@ class DF1(DifferentialFlow):
         scale = self._dt * np.pi / 180 / 86400
         scale_mdiff = scale * mdiff
 
-        a = (14.255984 - 14.18) * scale_mdiff
-        b = -2.00 * scale_mdiff
-        c = -2.09 * scale_mdiff
+        a = prot
+        b = -2.00
+        c = -2.09
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
-        phi[:nflux] += b * sinlat2 + c * sinlat2**2 + a
+        profile = a + b * sinlat2 + c * sinlat2 ** 2
+        phi[:nflux] += profile * scale_mdiff
 
 
 class DF2(DifferentialFlow):
@@ -138,13 +142,15 @@ class DF2(DifferentialFlow):
         scale = self._dt * np.pi / 180 / 86400
         scale_mdiff = scale * mdiff
 
-        a = (14.255984 - 14.18 + 0.2) * scale_mdiff
-        
-        b = -2.00 * scale_mdiff
-        c = -2.09 * scale_mdiff
+        # zeroth-order correction to increase rotation rate ~465nHz at equator
+        # per Komm et al.
+        a = prot + 0.2
+        b = -2.00
+        c = -2.09
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
-        phi[:nflux] += b * sinlat2 + c * sinlat2**2 + a
+        profile = a + b * sinlat2 + c * sinlat2**2
+        phi[:nflux] += profile * scale_mdiff
 
 
 class DF3(DifferentialFlow):
@@ -168,14 +174,15 @@ class DF3(DifferentialFlow):
         scale = self._dt * np.pi / 180 / 86400
         scale_mdiff = scale * mdiff
 
-        a = (14.255984 - 14.18 + 0.2) * scale_mdiff
-        
-        b = -2.00 * scale_mdiff
-        c = -2.09 * scale_mdiff
+        a = prot + 0.2
+        b = -2.00
+        c = -2.09
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
-        phi[:nflux] += (b * sinlat2 + c * sinlat2**2) * \
-            (0.8 * np.exp(-np.fabs(theta[:nflux]*180/np.pi - 90) / 80) + 0.2) + a
+        # taper high-latitude differential rotation for simulation of of AB Dor-like star
+        factor = (0.8 * np.exp(-np.fabs(theta[:nflux]*180/np.pi - 90) / 80) + 0.2)
+        profile = a + (b * sinlat2 + c * sinlat2**2) * factor
+        phi[:nflux] += profile * scale_mdiff
 
 
 class DF4(DifferentialFlow):

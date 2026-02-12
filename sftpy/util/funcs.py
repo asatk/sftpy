@@ -17,3 +17,18 @@ def consolidate(phi: np.ndarray,
     flux[:nnew] = flux[index]
 
     return nnew
+
+
+# replicates behavior of IDL SMOOTH
+def smooth(arr: np.ndarray, width: int) -> np.ndarray:
+
+    a = np.asarray(arr, dtype=np.float64, copy=True)
+
+    if width % 2 == 0:
+        width += 1
+
+    lo = (width - 1) // 2
+    hi = a.shape[0] - (width - 1) // 2
+    kernel = np.full(width, 1. / width)
+    a[lo:hi] = np.convolve(a, kernel, mode='valid')
+    return a

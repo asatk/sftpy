@@ -6,7 +6,7 @@ Collision schemes from the original Schrijver+ model:
 
 """
 
-# TODO
+
 # parameter in kit_iocontrol.pro `collide`
 # Collisions 0-none 1-opposite polarity, 2-both polarities
 
@@ -19,6 +19,7 @@ from sftpy import rng
 
 from ..component import Component
 from ..util import consolidate
+from ..util.other import phithetaxyz
 
 dt = rc["general.dt"]
 correction = rc["collide.correction"]
@@ -28,15 +29,7 @@ loglvl = rc["component.loglvl"]
 
 
 
-@nb.jit(cache=True)
-def calculate_pos(theta, phi, nflux):
-    sintheta = np.sin(theta[:nflux])
-    x = sintheta * np.cos(phi[:nflux])
-    y = sintheta * np.sin(phi[:nflux])
-    z = np.cos(theta[:nflux])
-    l = (x, y, z)
-    r = np.stack(l, axis=1)
-    return r
+
 
 
 
@@ -49,7 +42,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
 
     neighbors_nz = flux != 0
 
-    # r = calculate_pos(phi, theta, nflux)
+    r = phithetaxyz(phi, theta, nflux)
     sintheta = np.sin(theta)
     x = sintheta * np.cos(phi)
     y = sintheta * np.sin(phi)
@@ -288,7 +281,7 @@ class COL1(Collide):
         if nflux < 2:
             return nflux
 
-        r = calculate_pos(theta, phi, nflux)
+        r = phithetaxyz(phi, theta, nflux)
 
         # determine pos/neg concentrations
         indp = np.nonzero(np.sign(flux[:nflux]) == +1)[0]
@@ -394,6 +387,10 @@ class COL2(Collide):
     def range(self):
         return self._range
 
+    @range.setter
+    def range(self, value):
+        self._range = value
+
     def collide(self,
                 phi: np.ndarray,
                 theta: np.ndarray,
@@ -403,6 +400,7 @@ class COL2(Collide):
         if nflux < 2:
             return nflux
 
+        # number of indices that can be skipped must be no more than the total number of spots
         skips = min(self._range, nflux)
         # skips = nflux // 1000 + 1
         crphi = self._crphi

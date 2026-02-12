@@ -8,12 +8,13 @@ Migrated from cyclestrength.pro
 import abc
 import numba as nb
 import numpy as np
+from scipy.interpolate import make_interp_spline, BSpline
 
 from sftpy import simrc as rc
-from sftpy import rng
 
 from ..component import Component
 from ..util import Timestep
+from ..util.funcs import smooth
 
 latlo = rc["cycle.latlo"]
 lathi = rc["cycle.lathi"]
@@ -97,17 +98,47 @@ class CYC0(Cycle):
 
 
 # @nb.jit(cache=True)
-def cycle_12(time, pd, ovr, peak, mult, latlo, lathi):
+def cycle_prescription(time: float,
+                       pd: float,
+                       ovr: float,
+                       peak: float,
+                       mult: float,
+                       latlo: float,
+                       lathi: float):
+    """
+    Calculates the emergence strength and latitude for the current and
+    following cycles according to Schrijver & Title 2001 EQ 2.
+
+    Parameters
+    ----------
+    time : float
+        Current timestep (yr).
+    pd : float
+        Period of the activity cycle (yr)
+    ovr : float
+        Overlap between the current and following cycle (yr)
+    peak : float
+        Peak cycle strength (UNITS??)
+    mult : float
+        Cycle strength multiplier (dimensionless)
+    latlo : float
+        Minimum average emergence latitude over the course of the cycle (deg???)
+    lathi : float
+        Maximum average emergence latitude over the course of the cycle (deg???)
+
+    """
 
     amax = 2 * np.pi * peak / (pd + 2 * ovr)
     a = np.full(2, amax / peak, dtype=np.float64)
     a[0] *= np.mod(time + pd, pd)
     a[1] *= np.mod(time + pd / 2, pd)
 
-    if ovr < 0.01:
+    # 0-year overlap between cycles
+    if ovr == 0.0:
         b = 5
         c = 5.81
-    elif np.abs(ovr - 2) < 0.01:
+    # 2-year overlap between cycles
+    elif ovr == 2.0:
         b = 8
         c = 8.39
     else:
@@ -120,14 +151,16 @@ def cycle_12(time, pd, ovr, peak, mult, latlo, lathi):
     sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
 
     # flagged sin
-    sin_flag = (np.sin(a) > 0) + 0
+    sin_flag = np.sin(a) > 0
 
+    # ref???
+    # source strength calculation per S&T 01 EQ 2
     source = np.array([1, -1]) * sin_clip * mult * a / np.pi * \
             np.exp(-(a / np.pi)**2 * b) * c
+    # source emergence latitude follows empirical equatorward linear trend
     latsource = (lathi - (lathi - latlo) * a / np.pi) * sin_flag
 
     return source, latsource
-
 
 
 
@@ -140,32 +173,53 @@ class CYC1(Cycle):
 
     def cycle(self):
 
-        # time from seconds to years
+        # convert timestep: (s) -> (yr)
         time = self._timestep.gettime() / 86400 / 365
 
-        source, latsource = cycle_12(time, self._pd, self._ovr, self._peak,
-                                     self._mult, self._latlo, self._lathi)
+        # calculate source strength and source emergence latitude
+        source, latsource = cycle_prescription(time, self._pd, self._ovr, self._peak,
+                                               self._mult, self._latlo, self._lathi)
 
         return source, latsource
 
 
+
 class CYC2(Cycle):
     """
-    Schrijver cycle mode 2: -
+    Schrijver cycle mode 2: cycle amplitude modulated according to file specs
     """
+
+    def __init__(self,
+                 timestep: Timestep,
+                 fname: str,
+                 latlo: float=latlo,
+                 lathi: float=lathi,
+                 period: float=period,
+                 ovr: float=ovr,
+                 peak: float=peak,
+                 mult: float=mult,
+                 width: float=10,
+                 order: int=3,
+                 loglvl: int=loglvl):
+        super().__init__(timestep, latlo, lathi, period, ovr, peak, mult,
+                         loglvl)
+        self._spl = ssn_interp(fname, width, order)
+
     
     prefix = "[cycle-2]"
 
     def cycle(self):
 
-        # time from seconds to years
-        time = self._timestep.gettime()
+        # convert timestep: (s) -> (yr)
+        time = self._timestep.gettime() / 86400 / 365
 
-        source, latsource = cycle_12(time, self._pd, self._ovr, self._peak,
-                                     self._mult, self._latlo, self._lathi)
+        # calculate source strength and source emergence latitude
+        source, latsource = cycle_prescription(time, self._pd, self._ovr, self._peak,
+                                               self._mult, self._latlo, self._lathi)
 
-        # TODO yearssn
-        source *= yearssn(time, yssn, ssn)
+        # use interpolated Sunspot number data to modulate activity
+        s_interp = self._spl(time)
+        source *= s_interp
 
         return source, latsource
 
@@ -175,14 +229,35 @@ class CYC4(Cycle):
     Schrijver cycle mode 4: activity cycle matching solar minima records
     """
 
+    def __init__(self,
+                 timestep: Timestep,
+                 fname: str,
+                 lathi: float=lathi,
+                 peak: float=peak,
+                 mult: float=mult,
+                 width: int=10,
+                 order: int=3,
+                 loglvl: int=loglvl):
+        super().__init__(timestep,
+                         latlo=0.0,
+                         lathi=lathi,
+                         period=21.9,
+                         ovr=3.0,
+                         peak=peak,
+                         mult=mult,
+                         loglvl=loglvl)
+        self._spl = ssn_interp(fname, width, order)
+        self._polarity = polarity = np.ones(len(CYC4.minima), dtype=np.float64)
+        polarity[::2] *= -1
+
     prefix = "[cycle-4]"
 
     minima = np.array([
-        1635.1, 1646.0, 1657, 1668, 1679, 1690, 1700, 1713.5, 1724.0, 1733.5,
-        1745.0, 1756.0, 1767.0, 1775.5, 1784.0, 1798.5, 1811.0, 1825.0, 1833.5,
-        1844.0, 1856.5, 1867.0, 1879.0, 1890.0, 1901.4, 1913.4, 1923.8, 1934.4,
-        1944.3, 1954.3, 1964.5, 1976.6, 1986.5, 1996.7, 2006.9, 2018.2, 2029.2,
-        2040.1]) - 1646.001
+        1635.1, 1646.0, 1657.0, 1668.0, 1679.0, 1690.0, 1700.0, 1713.5, 1724.0,
+        1733.5, 1745.0, 1756.0, 1767.0, 1775.5, 1784.0, 1798.5, 1811.0, 1825.0,
+        1833.5, 1844.0, 1856.5, 1867.0, 1879.0, 1890.0, 1901.4, 1913.4, 1923.8,
+        1934.4, 1944.3, 1954.3, 1964.5, 1976.6, 1986.5, 1996.7, 2006.9, 2018.2,
+        2029.2, 2040.1]) - 1646.001
 
     # force solar conditions
     pd = 21.9
@@ -193,11 +268,9 @@ class CYC4(Cycle):
     def cycle(self):
 
         # time in years
-        time = self._timestep.gettime() / 3.15e7
+        time = self._timestep.gettime() / 86400 / 365
         minima = CYC4.minima
-    
-
-        polarity = np.mod(np.arange(len(minima), dtype=np.float64), 2) * 2 - 1
+        polarity = self._polarity
 
         # determine index of first cycle
         yi = np.nonzero(time < minima)[0][0] - 2
@@ -207,12 +280,12 @@ class CYC4(Cycle):
         a = np.pi * np.array([(time - minima[yi]) / (yd[0] / 2 + self._ovr),
                               (time - minima[yi+1]) / (yd[1] / 2 + self._ovr)])
         # clipped sin
-        # sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
+        sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
 
         # flagged sin
-        sin_flag = (np.sin(a) > 0) + 0
+        sin_flag = np.sin(a) > 0
 
-        source = self._mult * sin_flag * a / np.pi * polarity[[yi,yi+1]] * \
+        source = self._mult * sin_clip * a / np.pi * polarity[[yi,yi+1]] * \
                 np.exp(-(a / np.pi) ** 2 * 8) * 8.39
         latsource = (self._lathi - (self._lathi - self._latlo) * a / np.pi) * sin_flag
 
@@ -220,7 +293,46 @@ class CYC4(Cycle):
             source = np.roll(source, 1)
             latsource = np.roll(latsource, 1)
 
-        # TODO yearssn
-        source *= yearssn(time, yssn, ssn)
+        s_interp = self._spl(time)
+        source *= s_interp
 
         return source, latsource
+
+
+
+def ssn_interp(fname: str, width: int=10, order: int=3) -> BSpline:
+    """
+    Interpolate sunspot number data
+
+    Parameters
+    ----------
+    fname : str
+        Name of sunspot number data file
+    width : float
+        Size of boxcar smoothing kernel (yr)
+    order : int
+        Order of interpolating polynomial
+    """
+    # load sunspot number data from file
+    data = np.load(fname)
+    y = data[:,0]
+    s0 = data[:,1]
+    s = np.empty_like(s0)
+
+    # compute cycle strength by taking maximum of every 10 year interval
+    for i in range(data.shape[0] - width):
+        s[i+width/2] = np.max(s0[i:i+width+1])
+
+    # cycle strength normalized to ~unit strength in 1980's and 1990's
+    s = smooth(s, width) / 155.0
+
+    # assume the last 10 years to remain at fixed strength
+    s[-11:] = 0.75
+
+    # assume the first 18 years to remain at 0.01
+    s[:19] = 0.01
+
+    # cubic spline, not a smoothing interp
+    # no way to set IDL kw Sigma = 1.0 (default)
+    bspl = make_interp_spline(y, s, k=order, bc_type="clamped")
+    return bspl
