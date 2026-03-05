@@ -15,11 +15,11 @@ binflux = rc["physics.binflux"]
 
 class Fragment(Component):
     """
-    `Fragment` reduces the flux in a parent spot by giving a portion (less
-    than half) of its flux to a child spot.
+    `Fragment` donates flux from identified parent spots to new child spots.
 
-    The child spot will always undergo a random walk over a small
-    fragmentation distance that is specified in the `RandomWalk` component
+    The child spot receives a random fraction less than half of the parent
+    spot's original flux. The child undergoes a random walk over a small
+    fragmentation distance that must be specified in the `RandomWalk` component
     itself.
     """
 
@@ -30,7 +30,7 @@ class Fragment(Component):
                  correction: float=correction,
                  loglvl: int=loglvl):
         """
-        Create a `Fragment` component, optionally specifying the timestep,
+        Create a `Fragment` component with a RandomWalk component, timestep,
         relative fragmentation strength, and correction to collision frequency.
 
         Parameters
