@@ -8,7 +8,7 @@ Migrated from cyclestrength.pro
 import abc
 import numba as nb
 import numpy as np
-from scipy.interpolate import make_interp_spline, BSpline
+from scipy.interpolate import make_interp_spline, BSpline, make_smoothing_spline
 
 from sftpy import simrc as rc
 
@@ -23,6 +23,8 @@ ovr = rc["cycle.ovr"]
 peak = rc["cycle.peak"]
 mult = rc["cycle.mult"]
 loglvl = rc["component.loglvl"]
+
+
 
 class Cycle(Component, metaclass=abc.ABCMeta):
     """
@@ -65,36 +67,6 @@ class Cycle(Component, metaclass=abc.ABCMeta):
         """
         ...
 
-class CYCNone(Cycle):
-
-    prefix = "[cycle-none]"
-
-    def cycle(self):
-        source = np.array([0.0], dtype=np.float64)
-        latsource = np.array([90.0], dtype=np.float64)
-        return source, latsource
-
-
-class CYC3(CYCNone):
-    """
-    Schrijver cycle mode 3: emerging no regions at all.
-    """
-
-    prefix = "[cycle-3]"
-    ...
-
-
-class CYC0(Cycle):
-    """
-    Schrijver cycle mode 0: fixed activity level independent of time.
-    """
-
-    prefix = "[cycle-0]"
-
-    def cycle(self):
-        source = np.array([self._mult], dtype=np.float64)
-        latsource = np.array([self._lathi], dtype=np.float64)
-        return source, latsource
 
 
 # @nb.jit(cache=True)
@@ -164,6 +136,20 @@ def cycle_prescription(time: float,
 
 
 
+class CYC0(Cycle):
+    """
+    Schrijver cycle mode 0: fixed activity level independent of time.
+    """
+
+    prefix = "[cycle-0]"
+
+    def cycle(self):
+        source = np.array([self._mult], dtype=np.float64)
+        latsource = np.array([self._lathi], dtype=np.float64)
+        return source, latsource
+
+
+
 class CYC1(Cycle):
     """
     Schrijver cycle mode 1: fixed-amplitude activity cycle
@@ -222,6 +208,21 @@ class CYC2(Cycle):
         source *= s_interp
 
         return source, latsource
+
+
+
+class CYC3(Cycle):
+    """
+    Schrijver cycle mode 3: emerging no regions at all.
+    """
+
+    prefix = "[cycle-3]"
+
+    def cycle(self):
+        source = np.array([0.0], dtype=np.float64)
+        latsource = np.array([90.0], dtype=np.float64)
+        return source, latsource
+
 
 
 class CYC4(Cycle):
@@ -315,7 +316,8 @@ def ssn_interp(fname: str, width: int=10, order: int=3) -> BSpline:
     """
     # load sunspot number data from file
     data = np.load(fname)
-    y = data[:,0]
+    # start spline at year 0
+    y = data[:,0] - data[0,0]
     s0 = data[:,1]
     s = np.empty_like(s0)
 
@@ -333,6 +335,8 @@ def ssn_interp(fname: str, width: int=10, order: int=3) -> BSpline:
     s[:19] = 0.01
 
     # cubic spline, not a smoothing interp
-    # no way to set IDL kw Sigma = 1.0 (default)
-    bspl = make_interp_spline(y, s, k=order, bc_type="clamped")
+    # no way to set IDL kw Sigma = 1.0 (default) so this spline will touch every
+    # point instead of being loose/smooth
+    # bspl = make_interp_spline(y, s, k=order, bc_type="clamped")
+    bspl = make_smoothing_spline(y, s, lam=1.0)
     return bspl
