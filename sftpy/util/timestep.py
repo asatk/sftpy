@@ -14,8 +14,17 @@ class Timestep():
                  dt: float=dt,
                  t_init: float=t_init):
         self._dt = dt
+        self._t_init = t_init
         self._time = t_init
         self._step = 0
+
+    @property
+    def dt(self) -> float:
+        return self._dt
+
+    @property
+    def t_init(self) -> float:
+        return self._t_init
 
     def getstep(self):
         return self._step

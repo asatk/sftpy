@@ -9,6 +9,7 @@ from .cycle import CYC1
 from .cycle import CYC2
 from .cycle import CYC3
 from .cycle import CYC4
+from .polar import ConvergePolarCaps
 
 __all__ = [
     "Cycle",
@@ -18,4 +19,5 @@ __all__ = [
     "CYC2",
     "CYC3",
     "CYC4",
+    "ConvergePolarCaps",
 ]

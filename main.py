@@ -8,8 +8,8 @@ import numpy as np
 
 from sftpy import simrc as rc
 
-from sftpy.collide import COL1, COL2
-from sftpy.cycle import CYC1
+from sftpy.collide import COL2
+from sftpy.cycle import CYC1, ConvergePolarCaps
 from sftpy.decay import Decay
 from sftpy.dflow import DF2
 from sftpy.emerge import BMRSchrijver
@@ -39,6 +39,7 @@ def loop():
     # TODO confirm that this is same
     source = rc["cycle.mult"]
 
+    t_cycle = rc["cycle.period"]
 
 
     # logger
@@ -49,6 +50,7 @@ def loop():
     pwrap = WrapPhi()
     twrap = WrapTheta()
     crot = CarringtonRotation(dt)
+    polarconv = ConvergePolarCaps(t_cycle, time)
     cycle = CYC1(time)
     rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
     ini = InitTwo(nfluxmax)
@@ -84,6 +86,9 @@ def loop():
         logger.log(lognum, f"[{i}] t = {time/86400/365:.02g} yr")
         logger.clock_start("iter")
 
+        # polar converge -- remove half of all concentrations after half cycle
+        # nflux = polarconv.converge(phi, theta, flux, nflux)
+
         nflux = decay.decay(phi, theta, flux, nflux)
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
         synoptic = rwalk.move(phi, theta, flux, nflux, synoptic)
@@ -103,6 +108,7 @@ def loop():
 
         phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux, source_str, latsource, synoptic)
 
+        # TODO introduce checkpointer
         if i % savestep == 0:
             synoptic_save = synoptic_map(phi, theta, flux, nflux)
             synoptic_all[i//savestep] = synoptic_save
@@ -111,42 +117,7 @@ def loop():
 
         logger.log(lognum, f"nflux {nflux}")
 
-        # logger.plot(1, "imshow", synoptic.T)
-        if loglvl >= 2:
-            plot_syn(phi, theta, flux, nflux, name=f"Step {i}" +\
-                     f"({time/86400:.01f} d)", show=True)
-
     '''
-        """
-        # polar converge
-        # TODO do every half-cycle or just first half-cycle?
-        if np.fmod(time + cyl_t, cyl_t) > cyl_t / 2 and not params.polarconverge and params.remhalf:
-            ind = np.choice(nflux/2)
-            netflux = np.sum(flux[ind])
-            flux[:nflux/2] = flux[ind]
-            phi[:nflux/2] = phi[ind]
-            theta[:nflux/2] = theta[ind]
-            nflux = len(ind)
-
-            # TODO is this the weird flux normalization thing?
-            # see L662 kit.pro (search 'Flux imbalance 0')
-            flux[nflux/2:] = flux[nflux/2:] - netflux # ensure zero totalflux
-            params.polarconverge = True
-        """
-        
-        """
-        # difftest -- thr syn map at 3G
-        # TODO this should be another mode and not source-dependent
-        # from movecharges:
-        # if source , 0 (testruns for diffusion models) then difftest reutnrs
-        # the flux in the synmap above a thr of 3G.
-        if source < 0:
-            # isn't np.fabs redundant?
-            synoptic_abs = np.fabs(synoptic)
-            temp = 10 / (binflux / 1.4752)
-            # where is difftest used
-            difftest = np.sum(synoptic_abs[synoptic_abs > temp]) * self._dt
-        """
 
         """
         # scale control params back
@@ -155,55 +126,13 @@ def loop():
             dt /= params.ff
             as_specified = True
         """
-
-        """
-        # decay field
-        # safety catch -- NaN
-        """
         
         # calculate synoptic map
         synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
-
-        if params.savelat:
-            hist_aflux = synoptic
-            hist_flux = synoptic_map(phi, theta, flux, nflux)
-            lat_aflux = np.sum(hist_aflux, axis=0)
-            lat_flux = np.sum(hist_flux, axis=0)
-            np.save(lat_aflux, "lat_aflux.npy")
-            np.save(lat_flux, "lat_flux.npy")
-
-        # moves charges in random walk step size according to diffusion coeff
-
-        """
-        print(f"[{i:8d}|random_walk]")
-        synoptic = random_walk(phi, theta, flux, nflux, dt, rng, synoptic,
-                               source=source)
-        # safety catch -- NaN
-        """
-
-        # alternate applying merid and diffr steps
-        # active region inflow towards regions of strong flux density
-        # test for source collisions
-
-        # track unsigned flux history
-
-        # fragment concentrations
-
+        # arinflow
         # assimilate magnetogram data
-
-        # cycle
-        source_str, latsource = cycle(time)
-        source_str *= params.inv_pol * 2 - 1
-        # print
-
-
         # add sources
-
         # forecasting
-
-        # save timestep
-
-        # print stuff
     '''
 
     # finish
