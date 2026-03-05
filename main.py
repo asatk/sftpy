@@ -15,7 +15,7 @@ from sftpy.dflow import DF2
 from sftpy.emerge import BMRSchrijver
 from sftpy.fragment import Fragment
 from sftpy.initialize import InitTwo
-from sftpy.mflow import MF2
+from sftpy.mflow import MF2, MF4
 from sftpy.misc.carrington import CarringtonRotation
 from sftpy.rwalk import RW0, RW2
 
@@ -57,6 +57,7 @@ def loop():
 
     decay = Decay()
     rwalk = RW2(dt)
+    # mflow = MF4(cycle, dt/2)
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
