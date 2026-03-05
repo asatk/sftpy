@@ -4,6 +4,7 @@ from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
+from ..util import consolidate
 
 dt = rc["general.dt"]
 t_decay = rc["decay.t_decay"]
@@ -11,11 +12,8 @@ loglvl = rc["component.loglvl"]
 
 class Decay(Component):
     """
-    `Decay` gradually reduces the overall stellar magnetic flux according to
-    patterns observed on the Sun.
-
-    REF
-
+    `Decay` gradually reduces the overall stellar magnetic flux using an
+    exponential decay with a characteristic timescale.
     """
 
     prefix = "[decay]"
@@ -25,12 +23,12 @@ class Decay(Component):
                  t_decay: float=t_decay,
                  loglvl: int=loglvl):
         """
-        Create a Decay component, optionally specifying the timestep and decay
+        Create a `Decay` component with a timestep and characteristic decay
         time.
 
         The timescales `dt` and `t_decay` determine the factor by which total
-        absolute magnetic flux reduces. A decay constant `t_decay` of 1000 yrs
-        or greater yields no decay.
+        absolute magnetic flux reduces. A decay constant `t_decay` greater than
+        999 yrs yields no decay.
 
         Parameters
         ----------
@@ -52,8 +50,8 @@ class Decay(Component):
         super().__init__(loglvl)
 
         # no decay if decay timescale is too large
-        if t_decay >= 1000:
-            self.log(0, "long decay half-life (> 1000 yr): no decay")
+        if t_decay > 999.0:
+            self.log(0, "long decay half-life (> 999 yr): no decay")
             self._factor = 0
         else:
             self._factor = 1 - np.exp(
@@ -66,11 +64,10 @@ class Decay(Component):
               flux: np.ndarray,
               nflux: int):
         """
-        Remove flux from the total field.
+        Remove equal parts positive and negative flux from the surface field.
 
-        Flux is removed equally from both positive and negative spots. Spots
-        are chosen at random. The decrement is determined by the factor
-        $1 - 2^{dt/t_{decay}}$.
+        One unit of flux is removed from spots chosen at random. The total
+        absolute flux is decreased by a factor of $1 - 2^{dt/t_{decay}}$.
 
         Parameters
         ----------
@@ -88,7 +85,6 @@ class Decay(Component):
         -------
         nflux : int
             Number of spots remaining after decay
-
         """
 
         # too small of a timescale to decay any magnetic flux
@@ -105,7 +101,7 @@ class Decay(Component):
         ndecay = int(remove)
 
         # random chance to round up fractional flux amount to integer
-        if rng.uniform() < remove - ndecay:
+        if rng.uniform() < (remove - ndecay):
             ndecay += 1
 
         self.log(1, f"remove flux per polarity: {ndecay}/{aflux}")
@@ -123,36 +119,20 @@ class Decay(Component):
         pos = np.nonzero(flux[:nflux] > 0)[0]
         neg = np.nonzero(flux[:nflux] < 0)[0]
 
-        # select `ndecay` spots from which to decay flux (random w/ replacement)
-        ind_pos_decay = rng.choice(pos, size=ndecay, replace=True)
-        ind_neg_decay = rng.choice(neg, size=ndecay, replace=True)
+        # number of spots limited to at most those available in each polarity
+        ndecay_pos = min(ndecay, len(pos))
+        ndecay_neg = min(ndecay, len(neg))
+
+        # select `ndecay` spots to lose 1 flux unit (random w/o replacement)
+        ind_pos_decay = rng.choice(pos, size=ndecay_pos, replace=False)
+        ind_neg_decay = rng.choice(neg, size=ndecay_neg, replace=False)
 
         # indices of all spots that will decay flux
         ind_decay = np.r_[ind_pos_decay, ind_neg_decay]
 
-        # determine the unique indices of spots to be decayed and their counts
-        ind_unique, flux_decay = np.unique(ind_decay, return_counts=True)
-
-        # determine spots that will have no flux after decaying
-        will_empty = flux[ind_unique] <= flux_decay
-
-        # decay only the flux they have available -- don't want to flip signs
-        flux_decay[will_empty] = flux[ind_unique][will_empty]
-
         # decay the spots chosen to lose flux
-        flux[ind_unique] -= np.sign(flux[ind_unique]) * flux_decay
-
-        # no empty spots -- move on to next step
-        if not np.any(will_empty):
-            return nflux
+        flux[ind_decay] -= np.sign(flux[ind_decay])
 
         # remove empty spots
-        ind = np.nonzero(flux[:nflux])[0]
-        nremain = len(ind)
-
-        # only maintain list spots with non-zero flux
-        phi[:nremain] = phi[ind]
-        theta[:nremain] = theta[ind]
-        flux[:nremain] = flux[ind]
-
+        nremain = consolidate(phi, theta, flux, nflux)
         return nremain

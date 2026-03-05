@@ -1,15 +1,20 @@
 import numba as nb
 import numpy as np
 
+
+
 @nb.jit(cache=True)
 def consolidate(phi: np.ndarray,
                 theta: np.ndarray,
                 flux: np.ndarray,
                 nflux: int):
+    """
+    Removes spots with 0 flux. Returns number of remaining spots.
+    """
 
     index = np.nonzero(flux[:nflux])[0]
     nnew = len(index)
-    if nflux == nnew:
+    if nnew == nflux:
         return nflux
 
     phi[:nnew] = phi[index]
@@ -17,6 +22,7 @@ def consolidate(phi: np.ndarray,
     flux[:nnew] = flux[index]
 
     return nnew
+
 
 
 # replicates behavior of IDL SMOOTH
