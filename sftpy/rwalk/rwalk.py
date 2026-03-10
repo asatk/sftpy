@@ -1,11 +1,11 @@
 import abc
-import cv2 as cv
 import numpy as np
 
 from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
+from ..util import MapMaker
 
 binflux = rc["physics.binflux"]
 dt = rc["general.dt"]
@@ -14,6 +14,9 @@ diffusion = rc["physics.diffusion"]
 loglvl = rc["component.loglvl"]
 phibins = rc["synoptic.phibins"]
 thetabins = rc["synoptic.thetabins"]
+rad = rc["physics.rad"]
+
+
 
 class RandomWalk(Component, metaclass=abc.ABCMeta):
     """
@@ -27,7 +30,6 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
 
     def __init__(self,
                  dt: float=dt,
-                 thr: float=thr,
                  diffusion: float=diffusion,
                  loglvl: int=loglvl):
         """
@@ -38,8 +40,6 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
         ----------
         dt : float
             Timestep (s).
-        thr : float
-            Flux threshold for diff test (G).
         diffusion : float
             Diffusion coefficient for flux dispersal (km^2/s).
         loglvl : int
@@ -47,9 +47,6 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
         """
         super().__init__(loglvl)
         self._dt = dt
-        # threshold in gauss for map of abs flux density
-        # flux density contour for plage perimeter
-        self._thr = thr
         self._diffusion = diffusion
 
     @abc.abstractmethod
@@ -57,8 +54,7 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
              phi: np.ndarray,
              theta: np.ndarray,
              flux: np.ndarray,
-             nflux: int,
-             synoptic: np.ndarray=None):
+             nflux: int):
         """
         Move sources randomly on the surface of the star.
 
@@ -72,8 +68,6 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
             Fluxes of sources (10^18 Mx).
         nflux : int
             Number of sources
-        synoptic : np.ndarray
-            Synoptic map.
 
         Returns
         -------
@@ -81,39 +75,6 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
             Dilated synoptic map.
 
         """
-
-    def _move_start(self,
-                    synoptic: np.ndarray=None):
-        """
-        Helper method that smooths, thresholds, and dilates the synoptic map.
-
-        Parameters
-        ----------
-        synoptic : np.ndarray
-            Synoptic map
-
-        Returns
-        -------
-        synoptic_dil
-            Dilated synoptic map.
-
-        """
-        if synoptic is None:
-            return None
-
-        # threshold flux to include locations of plages -- binary map
-        synoptic_thr = np.astype(synoptic > self._thr / (binflux / 1.4752), np.uint8)
-        
-        # TODO IDL -- compare smooth+dilation ops
-        # smooth slightly and require at least 6 neighbors to be part of plage
-        synoptic_sm = cv.filter2D(synoptic_thr, -1,
-                                  np.ones((3,3), dtype=np.float64)/9)
-
-        # dilate to add an extra ring of pixels to plage
-        synoptic_thr2 = np.asarray(synoptic_sm > 5.9 / 9, dtype=np.uint8)
-        synoptic_dil = cv.dilate(synoptic_thr2, np.ones((3,3), dtype=np.uint8))
-
-        return synoptic_dil
 
     def _move_finish(self,
                      phi: np.ndarray,
@@ -165,20 +126,6 @@ class RandomWalk(Component, metaclass=abc.ABCMeta):
         theta[:nflux] = np.arccos(z/np.sqrt(x**2 + y**2 + z**2))
 
 
-class RWNone(RandomWalk):
-
-    prefix = "[rwalk-none]"
-
-    def move(self,
-             phi: np.ndarray,
-             theta: np.ndarray,
-             flux: np.ndarray,
-             nflux: int,
-             synoptic: np.ndarray=None):
-
-        synoptic = self._move_start(synoptic)
-        return synoptic
-
 
 class RW0(RandomWalk):
     """
@@ -192,18 +139,14 @@ class RW0(RandomWalk):
              phi: np.ndarray,
              theta: np.ndarray,
              flux: np.ndarray,
-             nflux: int,
-             synoptic: np.ndarray=None):
-
-        synoptic = self._move_start(synoptic)
+             nflux: int):
 
         # flux-independent stepping distance
-        step_val = np.sqrt(4 * self._diffusion * self._dt) / 7.e5
+        step_val = np.sqrt(4 * self._diffusion * self._dt) / rad
         step = np.full(nflux, step_val, dtype=np.float64)
 
         self._move_finish(phi, theta, step, nflux)
 
-        return synoptic
 
 
 class RW1(RandomWalk):
@@ -211,16 +154,28 @@ class RW1(RandomWalk):
     Schrijver diffusion mode 1 - step size is dependent on local flux density.
     """
 
+    def __init__(self,
+                 synmap: MapMaker,
+                 thr: float = thr,
+                 dt: float = dt,
+                 diffusion: float = diffusion,
+                 loglvl: int = loglvl):
+        super().__init__(dt, diffusion, loglvl)
+        self._synmap = synmap
+        # threshold in gauss for map of abs flux density
+        # flux density contour for plage perimeter
+        self._thr = thr
+
     prefix = "[rwalk-1]"
 
     def move(self,
              phi: np.ndarray,
              theta: np.ndarray,
              flux: np.ndarray,
-             nflux: int,
-             synoptic: np.ndarray=None):
+             nflux: int):
 
-        synoptic = self._move_start(synoptic)
+        synoptic = self._synmap.make_nesting_map(phi, theta, flux, nflux, self._thr, binflux)
+
         step = np.ones(nflux, dtype=np.float64)
 
         # step size is adjusted by the ratio of diffusion coefficients from
@@ -235,16 +190,16 @@ class RW1(RandomWalk):
 
         # dimension 0 / phi
         phi_edges = np.histogram_bin_edges(
-                phi[:nflux], bins=phi_bins, range=(0, 2*np.pi))
+                phi[:nflux], bins=phibins, range=(0, 2*np.pi))
         phi_pixels = np.digitize(phi[:nflux], phi_edges) - 1
         
         # dimension 1 / theta
         theta_edges = np.histogram_bin_edges(
-                theta[:nflux], bins=theta_bins, range=(0, np.pi))
+                theta[:nflux], bins=thetabins, range=(0, np.pi))
         theta_pixels = np.digitize(theta[:nflux], theta_edges) - 1
 
         # calculate 1d pixel for each source
-        pixels = theta_bins * phi_pixels + theta_pixels
+        pixels = thetabins * phi_pixels + theta_pixels
 
         # determine which source pixels belong to those matching criterion
         ind = np.isin(pixels, wherepx)
@@ -253,7 +208,7 @@ class RW1(RandomWalk):
         step[ind] = 110.0 / 250.0
 
         # flux-independent stepping distance
-        step = np.sqrt(4 * self._diffusion * step * self._dt) / 7.e5
+        step = np.sqrt(4 * self._diffusion * step * self._dt) / rad
 
         self._move_finish(phi, theta, step, nflux)
 
@@ -271,19 +226,13 @@ class RW2(RandomWalk):
              phi: np.ndarray,
              theta: np.ndarray,
              flux: np.ndarray,
-             nflux: int,
-             synoptic: np.ndarray=None):
-
-        synoptic = self._move_start(synoptic)
+             nflux: int):
 
         # flux-independent stepping distance
-        step_val = np.sqrt(4 * self._diffusion * self._dt) / 7.e5
+        step_val = np.sqrt(4 * self._diffusion * self._dt) / rad
 
         # if flux-dependent steps are required, apply correction to concentrations
         # contained in a plage. See Schrijver+ 96 and PhD thesis Hagenaar p119 f7.4.
-        step = step_val * (240. / 140.) * np.exp(-np.fabs(flux[:nflux]) *
-                                            binflux/35.)
+        step = step_val * 240. / 140. * np.exp(-np.abs(flux[:nflux])*binflux/35.)
 
         self._move_finish(phi, theta, step, nflux)
-
-        return synoptic

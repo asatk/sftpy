@@ -18,6 +18,8 @@ dif_mult = rc["dflow.mult"]
 cyclepol = rc["dflow.cyclepol"]
 loglvl = rc["component.loglvl"]
 thr = rc["dflow.DF4.thr"]
+cyl_mult = rc["cycle.mult"]
+rad = rc["physics.rad"]
 
 # prot = 14.255984    # deg/day -> 25.25 day/360deg rotation
 prot = 360.0 / 24.47    # deg/day -> 24.47 day/rotation
@@ -75,20 +77,6 @@ class DifferentialFlow(Component, metaclass=abc.ABCMeta):
         """
 
 
-class DFNone(DifferentialFlow):
-    """
-    Trivial component that performs no differential rotation.
-    """
-
-    prefix = "[dflow-none]"
-
-    def move(self,
-             phi: np.ndarray,
-             theta: np.ndarray,
-             flux: np.ndarray,
-             nflux: int):
-        return
-
 
 class DF1(DifferentialFlow):
     """
@@ -103,14 +91,10 @@ class DF1(DifferentialFlow):
              flux: np.ndarray,
              nflux: int):
 
-        if np.fabs(self._dif_mult) < 1.e-5:
-            return
-
         mdiff = self._dif_mult
 
         # deg / day -> rad / step
         scale = self._dt * np.pi / 180 / 86400
-        scale_mdiff = scale * mdiff
 
         a = prot
         b = -2.00
@@ -118,7 +102,7 @@ class DF1(DifferentialFlow):
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
         profile = a + b * sinlat2 + c * sinlat2 ** 2
-        phi[:nflux] += profile * scale_mdiff
+        phi[:nflux] += profile * scale * mdiff
 
 
 class DF2(DifferentialFlow):
@@ -134,13 +118,9 @@ class DF2(DifferentialFlow):
              flux: np.ndarray,
              nflux: int):
 
-        if np.fabs(self._dif_mult) < 1.e-5:
-            return
-
         mdiff = self._dif_mult
         # deg / day -> rad / step
         scale = self._dt * np.pi / 180 / 86400
-        scale_mdiff = scale * mdiff
 
         # zeroth-order correction to increase rotation rate ~465nHz at equator
         # per Komm et al.
@@ -150,7 +130,7 @@ class DF2(DifferentialFlow):
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
         profile = a + b * sinlat2 + c * sinlat2**2
-        phi[:nflux] += profile * scale_mdiff
+        phi[:nflux] += profile * scale * mdiff
 
 
 class DF3(DifferentialFlow):
@@ -172,7 +152,6 @@ class DF3(DifferentialFlow):
         mdiff = self._dif_mult
         # deg / day -> rad / step
         scale = self._dt * np.pi / 180 / 86400
-        scale_mdiff = scale * mdiff
 
         a = prot + 0.2
         b = -2.00
@@ -180,9 +159,9 @@ class DF3(DifferentialFlow):
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
         # taper high-latitude differential rotation for simulation of of AB Dor-like star
-        factor = (0.8 * np.exp(-np.fabs(theta[:nflux]*180/np.pi - 90) / 80) + 0.2)
+        factor = (0.8 * np.exp(-np.abs(theta[:nflux]*180/np.pi - 90) / 80) + 0.2)
         profile = a + (b * sinlat2 + c * sinlat2**2) * factor
-        phi[:nflux] += profile * scale_mdiff
+        phi[:nflux] += profile * scale * mdiff
 
 
 class DF4(DifferentialFlow):
@@ -211,56 +190,47 @@ class DF4(DifferentialFlow):
 
         thr = self._thr
         mdiff = self._dif_mult
-
-        if np.fabs(self._dif_mult) < 1.e-5:
-            return
         
         # TODO make this work
-        #dsource = self._cycle(time)[0] / cyl_mult
-        dsource = 1.0
+        dsource = self._cycle.cycle()[0] / cyl_mult
 
-        # TODO cyclepolarity = -1 or 1... so index below is same
-        self._cyclepol = (dsource[self._cyclepol] > 0) * 2 - 1
+        self._cyclepol = np.sign(dsource[self._cyclepol])
         srcdiff = self._cyclepol * self._dif_mult
 
         mdiff = 1.0     # magnitude of differential rotation
-        diff = np.fabs(self._dif_mult)    # magnitude of the relative flow
+        diff = np.abs(self._dif_mult)    # magnitude of the relative flow
         sdiff = np.sign(srcdiff)
         
         # deg / day -> rad / step
         scale = self._dt * np.pi / 180 / 86400
         scale_mdiff = scale * mdiff
 
-        a = (14.255984 - 14.18) * scale_mdiff
-
-        b = -2.00 * scale_mdiff
-        c = -2.09 * scale_mdiff
+        a = prot
+        b = -2.00
+        c = -2.09
 
         sinlat2 = np.sin(np.pi / 2 - theta[:nflux])**2
-        phi[:nflux] += b * sinlat2 + c * sinlat2**2 + a
+        profile = a + b * sinlat2 + c * sinlat2**2
+        phi[:nflux] += profile * scale * mdiff
 
-        # what if flux was limited to nflux elemetns instead of whole array
-
-        # TODO this is wrong; fluxes move opposite dirs
-        # is this wrong?
-
-        # fast flux and slow flux
+        # fast flux and slow flux?
         if sdiff > 0:
-            fflux = (flux >  thr) & (theta >  np.pi/6) & (theta <   np.pi/2) | \
+            fflux = (flux >  thr) & (theta >  np.pi/6) & (theta < np.pi/2) | \
                     (flux < -thr) & (theta >= np.pi/2) & (theta < np.pi*5/6)
             sflux = (flux >  thr) & (theta >= np.pi/2) & (theta < np.pi*5/6) | \
-                    (flux < -thr) & (theta >  np.pi/6) & (theta <   np.pi/2)
+                    (flux < -thr) & (theta >  np.pi/6) & (theta < np.pi/2)
         else:
-            fflux = (flux < -thr) & (theta > np.pi*5/6) & (theta <  np.pi/2) | \
-                    (flux >  thr) & (theta >=  np.pi/2) & (theta < np.pi*5/6)
+            fflux = (flux < -thr) & (theta >  np.pi/6) & (theta < np.pi/2) | \
+                    (flux >  thr) & (theta >= np.pi/2) & (theta < np.pi*5/6)
             sflux = (flux < -thr) & (theta >= np.pi/2) & (theta < np.pi*5/6) | \
                     (flux >  thr) & (theta >  np.pi/6) & (theta < np.pi/2)
 
-        scale2 = 10.0 / 7e8 * dt
-        scale2_diff = scale2 * diff
+        scale2 = 10.0 / (rad * 1000) * dt
 
-        phi[fflux] += scale2_diff
-        phi[sflux] -= scale2_diff
+        phi[fflux] += scale2 * diff
+        phi[sflux] -= scale2 * diff
+
+
         
         # TODO -- move map to main if showmap
         if False:
@@ -277,8 +247,11 @@ class DF4(DifferentialFlow):
                 phibins: int=360,
                 thetabins: int=180):
 
+        # see fits2map for converting full-disk magnetogram FITS file into map and plotting
+        # https://hesperia.gsfc.nasa.gov/rhessidatacenter/complementary_data/maps/
+
         ssflux = np.copy(flux)
-        ssflux[np.fabs(ssflux) < 50] = 0
+        ssflux[np.abs(ssflux) < 50] = 0
 
         # TODO synoptic map prescription in schrijver + np.hist2d
         hist, _, _ = np.hist2d(phi, theta, bins=(phibins, thetabins),

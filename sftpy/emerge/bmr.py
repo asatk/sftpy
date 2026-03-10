@@ -9,7 +9,7 @@ from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
-from ..util import powerlaw_rv
+from ..util import powerlaw_rv, MapMaker
 from ..util.other import tiltmatrix, phithetaxyz
 
 binflux= rc["physics.binflux"]
@@ -36,6 +36,10 @@ avefluxd = rc["schrijver.avefluxd"]
 miniflux = rc["schrijver.miniflux"]
 maxflux = rc["schrijver.maxflux"]
 
+thr = rc["rwalk.thr"]
+
+
+
 class BMREmerge(Component, metaclass=abc.ABCMeta):
     """
     Base class for Bipole Magnetic Region emergence components that follow
@@ -59,24 +63,8 @@ class BMREmerge(Component, metaclass=abc.ABCMeta):
                flux: np.ndarray,
                nflux: int,
                source: np.ndarray,
-               latsource: np.ndarray,
-               synoptic: np.ndarray,):
+               latsource: np.ndarray):
         ...
-
-
-
-class BMRNone(BMREmerge):
-
-    def emerge(self,
-               phi: np.ndarray,
-               theta: np.ndarray,
-               flux: np.ndarray,
-               nflux: int,
-               source: np.ndarray,
-               latsource: np.ndarray,
-               synoptic: np.ndarray):
-        return phi, theta, flux, nflux
-
 
 
 class BMRAssimilate(BMREmerge):
@@ -98,8 +86,7 @@ class BMRAssimilate(BMREmerge):
                flux: np.ndarray,
                nflux: int,
                source: np.ndarray=None,
-               latsource: np.ndarray=None,
-               synoptic: np.ndarray=None):
+               latsource: np.ndarray=None):
         ...
 
 
@@ -157,13 +144,15 @@ class BMRSchrijver(BMREmerge):
     prefix = "[bmr-cjs]"
 
     def __init__(self,
+                 map_maker: MapMaker,
                  dt: float=dt,
                  nfluxmax: int=nfluxmax,
                  as_specified: bool=True,
                  gradual: bool=False,
                  loglvl: int=loglvl):
         super().__init__(dt, nfluxmax, loglvl)
-        self._as_specified = as_specified   # fast forward/ no ER/ not full res
+        self._map_maker = map_maker
+        self._as_specified = as_specified   # fast forward/no ER/not full res
         self._gradual = gradual
 
     def emerge(self,
@@ -172,8 +161,7 @@ class BMRSchrijver(BMREmerge):
                flux: np.ndarray,
                nflux: int,
                source: np.ndarray,
-               latsource: np.ndarray,
-               synoptic: np.ndarray):
+               latsource: np.ndarray):
 
         dt = self._dt
         as_specified = self._as_specified
@@ -184,12 +172,6 @@ class BMRSchrijver(BMREmerge):
 
         # TODO what can we vectorize / pull out of loop?
         for i in range(len(source)):
-
-            # cycle strength is negligible; inject no new sources
-            # if np.abs(source[i]) < 1e-5:
-            #     continue
-
-
 
             # Step 1 --- determine size distribution
 
@@ -233,12 +215,6 @@ class BMRSchrijver(BMREmerge):
 
             self.log(1, f"ntotal1 = {ntotal1}   ntotal2 = {ntotal2}   ntotal = {ntotal}")
             self.log(1, f"ntotal (all) = {ntotal}")
-            self.log(3, f"flux stats: mean {np.mean(newflux)}" + \
-                    f"   median {np.median(newflux)}   sd {np.std(newflux)}")
-            self.plot(3, "hist", newflux, bins=50)
-            self.plot(3, "xlim", (0.0, None))
-            self.plot(3, "title", "newflux")
-            self.plot(3, "show")
 
             # TODO -- this mode emerges nothing...
             # accelerated-time mode; leave out ephemeral regions
@@ -269,14 +245,10 @@ class BMRSchrijver(BMREmerge):
             newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
             width = lat_width * (np.exp(-newflux * binflux / lat_fold) + 0.15)
             newtheta += rng.normal(scale=width*np.pi/180, size=ntotal)
-            # introdued this myself just to prevent stuff from going oob
+            # introduced this myself just to prevent stuff from going oob
             newtheta = np.clip(newtheta, a_min=-np.pi/2, a_max=np.pi/2)
+            # latitude -> co-latitude
             newtheta = np.pi/2 - newtheta
-
-            self.log(3, "new theta")
-            self.plot(3, "hist", newtheta, bins=25)
-            self.plot(3, "title", "concentration latitudes")
-            self.plot(3, "show")
 
             # nesting
             # ~40% of activate regions emerge inside existing regions.
@@ -301,12 +273,14 @@ class BMRSchrijver(BMREmerge):
                     thetabins = 180
                     phibins = 360
 
-                    thetalim = np.int64(np.sin(50 * np.pi / 180) * thetabins / 2) + 1
+                    thetalim = np.int64((1 - np.sin(50 * np.pi / 180)) * thetabins / 2)
 
                     xx = np.zeros(thetabins, dtype=np.byte)
-                    xx[thetalim:thetabins-thetalim] = 1
+                    xx[thetalim:-thetalim] = 1
                     yy = np.ones(phibins, dtype=np.byte)
                     # TODO check this matmult
+                    synoptic = self._map_maker.make_nesting_map(
+                        phi, theta, flux, nflux, thr, binflux)
                     # ind = (synoptic * np.outer(yy, xx)) != 0
                     ind = np.nonzero(np.ravel((synoptic * np.outer(yy, xx))))[0]
                     nind = len(ind)
@@ -315,22 +289,21 @@ class BMRSchrijver(BMREmerge):
                         nreplace = min(npick, nind)
                         self.log(3, f"NEST nreplace = {nreplace}")
                         point = rng.choice(ind, replace=False, size=nreplace)
-                        lat = point / phibins
+                        point = np.astype(point, np.int64)
+                        lat = point // phibins
 
                         # TODO check the  +1 on these
                         self.log(3, f"NEST point = {point.shape}")
                         self.log(3, f"NEST lat = {lat.shape}")
                         self.log(3, f"NEST ind_nest_picks = {ind_nest_picks.shape}")
                         self.log(3, f"NEST new_phi = {newphi.shape}")
-                        newphi[ind_nest_picks[:nreplace+1]] = point - phibins * lat
-                        newtheta[ind_nest_picks[:nreplace+1]] = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
+                        newphi[ind_nest_picks[:nreplace]] = point - phibins * lat
+                        newtheta[ind_nest_picks[:nreplace]] = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
                     else:
                         self.log(3, "NEST no nests")
                 else:
                     self.log(3, "NEST no nests")
                 
-
-
 
 
             # Step 3 --- orientation of bipole axes
@@ -341,25 +314,16 @@ class BMRSchrijver(BMREmerge):
             orient[ind_pol] = np.pi - orient[ind_pol]
             orient += np.pi * (source[i] < 0)
 
-            self.log(1, f"joy = {joy}   joy_width = {joy_width}    joy_fold {joy_fold}")
-            self.plot(3, "hist", orient, bins=15)
-            self.plot(3, "title", "Orient")
-            self.plot(3, "show")
-
 
 
             # Step 4 --- position concentrations
             r = (np.sqrt(binflux * newflux * 1.e18 / avefluxd / np.pi) + 7.e8) / 7.e10
-            self.log(3, "separation")
-            self.plot(3, "hist", r)
-            self.plot(3, "title", "Separation r")
-            self.plot(3, "show")
             # impose minimum separation of ~0.5 supergranulation of 18Mm
             sep = np.clip(r, a_min=9000./7.e5/2, a_max=None)
             # number of new concentrations that contain 15e18 Mx w/ at least
             # three equal concentrations per polarity
-            percon = np.clip(newflux / 3, a_min=1, a_max=None).astype(np.int64)
-            percon[newflux > 3 * 15 / binflux] = 15 / binflux
+            percon = np.clip(newflux // 3, a_min=1, a_max=None)
+            percon[newflux > 3 * 15 / binflux] = 15 // binflux
 
             bulk = np.clip(newflux // percon, a_min=1, a_max=None)
             rest = np.clip(newflux - percon * bulk, a_min=0, a_max=None)
@@ -380,7 +344,7 @@ class BMRSchrijver(BMREmerge):
             offset2 = rng.uniform(high=r_nadd)
             angle2 = rng.uniform(high=2*np.pi, size=nadd_tot)
 
-            x_tmp = np.r_[sep_nadd + offset1 * np.cos(angle1),
+            x_tmp = np.r_[ sep_nadd + offset1 * np.cos(angle1),
                           -sep_nadd + offset2 * np.cos(angle2)]
             y_tmp = np.r_[offset1 * np.sin(angle1),
                           offset2 * np.sin(angle2)]
@@ -411,42 +375,12 @@ class BMRSchrijver(BMREmerge):
             y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
             z = costheta - xo * sintheta
 
-            if self._loglvl >= 7:
-                from matplotlib import pyplot as plt
-                fig = plt.figure()
-                ax = fig.add_subplot(projection="3d")
-                #oct1 = (x > 0.0) & (y > 0.0) & (z > 0.0)
-                #oct1 = (x > 0.0) & (y > 0.0) & (z > 0.0)
-                ax.scatter(x, y, z, s=5)
-                #ax.scatter(x[oct1], y[oct1], z[oct1])
-                ax.set_xlabel("x")
-                ax.set_ylabel("y")
-                ax.set_zlabel("z")
-                plt.show()
-
+            # TODO numpy mod vs idl mod
             aphi = np.fmod(np.arctan2(y, x) + 2 * np.pi, 2 * np.pi)
             atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
 
-            self.log(5, f"aphi {aphi.shape}")
-            self.log(5, f"atheta {atheta.shape}")
-            self.log(5, f"mean atheta {np.mean(atheta)} std atheta "
-                  f"{np.std(atheta)}")
-
-            self.log(3, "atheta hist")
-            self.plot(3, "hist", atheta, bins=150)
-            self.plot(3, "xticks", [0, np.pi/2, np.pi], ["0", r"$\pi/2$", r"$\pi$"])
-            self.plot(3, "xlim", (0, np.pi))
-            self.plot(3, "title", "added spot latitudes")
-            self.plot(3, "show")
-
-            self.log(3, "aphi hist")
-            self.plot(3, "hist", aphi, bins=150)
-            self.plot(3, "xticks", [0, np.pi, 2*np.pi], ["0", r"$\pi$", r"$2\pi$"])
-            self.plot(3, "xlim", (0, 2*np.pi))
-            self.plot(3, "title", "added spot longitudes")
-            self.plot(3, "show")
-
             # TODO add Poisson noise CORRECTLY -- this caused the weird streak
+            # this is just an observational thing, no?
             scale_nadd = np.sqrt(percon_nadd)
             noise = rng.normal(scale=scale_nadd)
             noise = 0.0

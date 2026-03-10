@@ -15,12 +15,12 @@ from sftpy.dflow import DF2
 from sftpy.emerge import BMRSchrijver
 from sftpy.fragment import Fragment
 from sftpy.initialize import InitTwo
-from sftpy.mflow import MF2, MF4
+from sftpy.mflow import MF2
 from sftpy.misc.carrington import CarringtonRotation
 from sftpy.rwalk import RW0, RW2
 
 from sftpy.misc import WrapPhi, WrapTheta
-from sftpy.util import Logger, synoptic_map, Timestep
+from sftpy.util import Logger, MapMaker, Timestep
 from sftpy.viz import plot_syn, anim_syn, plot_aflux
 
 
@@ -41,15 +41,19 @@ def loop():
 
     t_cycle = rc["cycle.period"]
 
+    phibins = rc["synoptic.phibins"]
+    thetabins = rc["synoptic.thetabins"]
+
 
     # logger
     logger = Logger(loglvl, "[loop]")
 
     # define computation components
-    time = Timestep()
+    time = Timestep(dt=dt)
     pwrap = WrapPhi()
     twrap = WrapTheta()
     crot = CarringtonRotation(dt)
+    map_maker = MapMaker(phibins, thetabins)
     polarconv = ConvergePolarCaps(t_cycle, time)
     cycle = CYC1(time)
     rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
@@ -57,23 +61,22 @@ def loop():
 
     decay = Decay()
     rwalk = RW2(dt)
-    # mflow = MF4(cycle, dt/2)
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
     collide = COL2(loglvl=0)
     fragment = Fragment(rwalk_frag)
-    bmr = BMRSchrijver(nfluxmax, loglvl=0)
+    bmr = BMRSchrijver(map_maker=map_maker, dt=dt, nfluxmax=nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
-    synoptic_all = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
+    map_series = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
 
     # initialize simulation
     phi, theta, flux, nflux = ini.init()
 
     # save initial step
-    synoptic_save = synoptic_map(phi, theta, flux, nflux)
-    synoptic_all[0] = synoptic_save
+    map_curr = map_maker.make_Carrington_map(phi, theta, flux, nflux)
+    map_series[0] = map_curr
 
     logger.clock_start("sim", "Simulation begins:")
     for i in range(1, nstep):
@@ -88,11 +91,10 @@ def loop():
         logger.clock_start("iter")
 
         # polar converge -- remove half of all concentrations after half cycle
-        # nflux = polarconv.converge(phi, theta, flux, nflux)
+        nflux = polarconv.converge(phi, theta, flux, nflux)
 
         nflux = decay.decay(phi, theta, flux, nflux)
-        synoptic = synoptic_map(phi, theta, np.fabs(flux), nflux)
-        synoptic = rwalk.move(phi, theta, flux, nflux, synoptic)
+        rwalk.move(phi, theta, flux, nflux)
         dflow1.move(phi, theta, flux, nflux)
         mflow.move(theta, nflux)
         dflow2.move(phi, theta, flux, nflux)
@@ -107,12 +109,13 @@ def loop():
         source_str, latsource = cycle.cycle()
         source_str *= inv_pol * 2 - 1
 
-        phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux, source_str, latsource, synoptic)
+        phi, theta, flux, nflux = bmr.emerge(
+            phi, theta, flux, nflux, source_str, latsource)
 
         # TODO introduce checkpointer
         if i % savestep == 0:
-            synoptic_save = synoptic_map(phi, theta, flux, nflux)
-            synoptic_all[i//savestep] = synoptic_save
+            map_curr = map_maker.make_Carrington_map(phi, theta, flux, nflux)
+            map_series[i//savestep] = map_curr
             logger.clock_check("iter", f"[{i}]")
             logger.clock_check("sim", "Simulation elapsed time: ")
 
@@ -142,14 +145,14 @@ def loop():
 
     plot_syn(phi, theta, flux, nflux, name="Final Stellar Surface", show=True)
 
-    return synoptic_all
+    return map_series
 
         
 
 if __name__ == "__main__":
     outfile = rc["general.outfile"]
 
-    synoptic_all = loop()
-    np.save(outfile, synoptic_all)
-    plot_aflux(synoptic_all, show=True)
-    anim_syn(synoptic_all, flux_thresh=100, ms=100, show=True)
+    map_series = loop()
+    np.save(outfile, map_series)
+    plot_aflux(map_series, show=True)
+    anim_syn(map_series, flux_thresh=100, ms=100, show=True)

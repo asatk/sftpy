@@ -42,7 +42,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
 
     neighbors_nz = flux != 0
 
-    r = phithetaxyz(phi, theta, nflux)
+    # r = phithetaxyz(phi, theta, nflux)
     sintheta = np.sin(theta)
     x = sintheta * np.cos(phi)
     y = sintheta * np.sin(phi)
@@ -407,6 +407,7 @@ class COL2(Collide):
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
         seeds = rng.integers(low=2 ** 32 - 1, size=nflux, dtype=np.uint32)
 
+        # TODO is the copy necessary?
         phi_c = phi[:nflux].copy()
         theta_c = theta[:nflux].copy()
         flux_c = flux[:nflux].copy()
