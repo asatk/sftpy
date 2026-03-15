@@ -87,11 +87,11 @@ def loop():
         else:
             lognum = loglvl + 1
 
-        logger.log(lognum, f"[{i}] t = {time/86400/365:.02g} yr")
+        logger.log(lognum, f"[{i}] t = {time/86400/365:.03g} yr")
         logger.clock_start("iter")
 
         # polar converge -- remove half of all concentrations after half cycle
-        nflux = polarconv.converge(phi, theta, flux, nflux)
+        # nflux = polarconv.converge(phi, theta, flux, nflux)
 
         nflux = decay.decay(phi, theta, flux, nflux)
         rwalk.move(phi, theta, flux, nflux)

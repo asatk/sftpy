@@ -26,8 +26,9 @@ class ConvergePolarCaps(Component):
 
         t = self._time.gettime() / 86400 / 365 - self._time.t_init
         tpdt = t + self._time.dt / 86400 / 365
-        if not (((t % self._t_cycle) < self._t_cycle / 2) and
-                ((tpdt % self._t_cycle) > self._t_cycle / 2)):
+        half_pd = self._t_cycle / 2
+        if not (((t % half_pd) > (half_pd / 2)) and
+                ((tpdt % half_pd) < (half_pd / 2))):
             return nflux
 
         ind = rng.uniform(size=nflux) < 0.5
@@ -37,6 +38,6 @@ class ConvergePolarCaps(Component):
         phi[:nnew] = phi[:nflux][ind]
         theta[:nnew] = theta[:nflux][ind]
         # TODO huh? "ensures zero total flux?
-        flux[nnew//2:nnew//2+1] = flux[nnew//2:nnew//2+1] - netflux
+        flux[nnew//2] -= netflux
 
         return nnew

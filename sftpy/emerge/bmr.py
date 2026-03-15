@@ -38,6 +38,8 @@ maxflux = rc["schrijver.maxflux"]
 
 thr = rc["rwalk.thr"]
 
+rad = rc["physics.rad"]
+
 
 
 class BMREmerge(Component, metaclass=abc.ABCMeta):
@@ -167,11 +169,11 @@ class BMRSchrijver(BMREmerge):
         as_specified = self._as_specified
         gradual = self._gradual
 
-        # track total flux added in timestep
-        # sourceinput = 0.0
-
         # TODO what can we vectorize / pull out of loop?
         for i in range(len(source)):
+
+            if np.abs(source[i]) < 1e-5:
+                continue
 
             # Step 1 --- determine size distribution
 
@@ -182,8 +184,8 @@ class BMRSchrijver(BMREmerge):
 
 
             minflux = miniflux / binflux
-            scale = 1. / ((1.0 - p) * 1.5 ** (1.0 - p) * avefluxd ** (1.0 - p))
-            rangefactor = maxflux ** (1.0 - p) - (miniflux * 2) ** (1.0 - p)
+            scale = 1. / ((1 - p) * 1.5 ** (1 - p) * avefluxd ** (1 - p))
+            rangefactor = maxflux ** (1 - p) - (miniflux * 2) ** (1 - p)
             ntotal1 = 2 * a * dt / 86400 * scale * rangefactor
 
             frac = ntotal1 - int(ntotal1)
@@ -195,10 +197,10 @@ class BMRSchrijver(BMREmerge):
 
             ## [2] Low-flux tail dominated by ephemeral regions
             a = 8.0
-            a *= np.abs(source[i])**(1.0/3) * turbulent + (1 - turbulent)
+            a *= np.abs(source[i])**(1./3) * turbulent + (1 - turbulent)
             p = psource + 1
-            scale = 1. / ((1.0 - p) * 1.5 ** (1.0 - p) * avefluxd ** (1.0 - p))
-            rangefactor = maxflux ** (1.0 - p) - (miniflux * 2) ** (1.0 - p)
+            scale = 1. / ((1 - p) * 1.5 ** (1 - p) * avefluxd ** (1 - p))
+            rangefactor = maxflux ** (1 - p) - (miniflux * 2) ** (1 - p)
             ntotal2 = 2 * a * dt / 86400 * scale * rangefactor
 
             frac = ntotal2 - int(ntotal2)
@@ -213,14 +215,15 @@ class BMRSchrijver(BMREmerge):
             if ntotal == 0:
                 continue
 
-            self.log(1, f"ntotal1 = {ntotal1}   ntotal2 = {ntotal2}   ntotal = {ntotal}")
-            self.log(1, f"ntotal (all) = {ntotal}")
+            self.log(1, f"Cycle ({i}) strength: {source[i]:.3e}")
+            self.log(1, f"Active = {ntotal1}\tEphemeral = {ntotal2}\tAll = {ntotal}")
 
             # TODO -- this mode emerges nothing...
             # accelerated-time mode; leave out ephemeral regions
             # regions that are 2 sq deg or larger, i.e.,
             # 2*1.5e18*avefluxd/1e18 = 3 avefluxd units of 1e18
-            if not as_specified and cyl_mult > 1e-5:
+            # cyl_mult < 0 is some test mode
+            if not as_specified and cyl_mult > 0:
                 self.log(2, f"NEWFLUX {newflux}")
                 index = newflux > (3 * avefluxd / binflux)
                 if not np.any(index):
@@ -230,7 +233,7 @@ class BMRSchrijver(BMREmerge):
                 ntotal = len(newflux)
 
             # testrun mode -- include only ephemeral regions
-            if cyl_mult < -1e-5:
+            if cyl_mult < 0:
                 index = newflux < (3 * avefluxd / binflux)
                 if not np.any(index):
                     return phi, theta, flux, nflux
@@ -240,12 +243,11 @@ class BMRSchrijver(BMREmerge):
 
 
             # Step 2 --- determine positions
-            self.log(1, f"latsource = {latsource[i]}")
             newphi = rng.uniform(high=2*np.pi, size=ntotal)
             newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
             width = lat_width * (np.exp(-newflux * binflux / lat_fold) + 0.15)
             newtheta += rng.normal(scale=width*np.pi/180, size=ntotal)
-            # introduced this myself just to prevent stuff from going oob
+            # TODO introduced this myself just to prevent stuff from going oob
             newtheta = np.clip(newtheta, a_min=-np.pi/2, a_max=np.pi/2)
             # latitude -> co-latitude
             newtheta = np.pi/2 - newtheta
@@ -317,9 +319,9 @@ class BMRSchrijver(BMREmerge):
 
 
             # Step 4 --- position concentrations
-            r = (np.sqrt(binflux * newflux * 1.e18 / avefluxd / np.pi) + 7.e8) / 7.e10
+            r = (np.sqrt(binflux * newflux * 1.e18 / avefluxd / np.pi) + rad * 1000) / 7.e10
             # impose minimum separation of ~0.5 supergranulation of 18Mm
-            sep = np.clip(r, a_min=9000./7.e5/2, a_max=None)
+            sep = np.clip(r, a_min=9000./rad/2, a_max=None)
             # number of new concentrations that contain 15e18 Mx w/ at least
             # three equal concentrations per polarity
             percon = np.clip(newflux // 3, a_min=1, a_max=None)
@@ -402,14 +404,15 @@ class BMRSchrijver(BMREmerge):
             if gradual:
                 for j in range(ntotal):
 
-                    dur = np.asarray(np.sum(np.fabs(aflux)) * binflux / 0.05 / dt)+1
+                    # TODO add gradual emergence param
+                    dur = np.asarray(np.sum(np.abs(aflux)) * binflux / 0.05 / dt, dtype=np.int64)+1
                     
                     if dur > 1 or np.any((latime == 0) & (laflux != 0)):
                         
                         self.log(2, f"gradual flux emergence")
 
                         an = len(aflux) / 2
-                        ai = np.asarray(rng.uniform(high=dur, size=an))
+                        ai = rng.integers(high=dur, size=an)
                         laphi = np.r_[laphi, aphi]
                         latheta = np.r_[latheta, atheta]
                         laflux = np.r_[laflux, aflux]
@@ -420,7 +423,7 @@ class BMRSchrijver(BMREmerge):
                             aphi = laphi[ia]
                             atheta = latheta[ia]
                             aflux = laflux[ia]
-                            nadd = len(ia) / 2
+                            nadd = np.sum(ia) / 2
                         else:
                             aphi = 0.0
                             atheta = 0.0
@@ -439,11 +442,6 @@ class BMRSchrijver(BMREmerge):
                             laflux = 0
                             latime = 0
 
-
-            self.log(1, f"nadd_tot {nadd_tot}")
-            self.log(1, f"2*nadd_tot {2*nadd_tot}")
-            self.log(1, f"nflux+2*nadd_tot {nflux+2*nadd_tot}")
-            self.log(1, f"phi[nflux:nflux+2*nadd_tot] {phi[nflux:nflux+2*nadd_tot].shape}")
             if nflux + 2 * nadd_tot >= self._nfluxmax:
                 
                 while nflux + 2 * nadd_tot >= self._nfluxmax:
@@ -469,7 +467,7 @@ class BMRSchrijver(BMREmerge):
 
             nflux += nadd_tot * 2
 
-            self.log(1, f"add {nadd_tot}")
+            # self.log(1, f"add {nadd_tot}")
 
 
         return phi, theta, flux, nflux

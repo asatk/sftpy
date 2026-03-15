@@ -116,8 +116,13 @@ def cycle_prescription(time: float,
     else:
         b = (amax * np.cos(amax) + np.sin(amax)) / \
                 (2 * np.sin(amax) * amax**2) * np.pi**2
-        c = amax * np.exp(-(amax / np.pi)**2 * b) / np.pi / \
-                max(np.sin(amax), 0)
+        c = 1. / (amax * np.exp(-(amax / np.pi)**2 * b) / np.pi *
+                max(np.sin(amax), 0))
+
+    # print("amax:", amax)
+    # print("a: ", a)
+    # print("b: ", b)
+    # print("c: ", c)
 
     # clipped sin
     sin_clip = np.clip(np.sin(a), a_min=0, a_max=None)
@@ -165,6 +170,8 @@ class CYC1(Cycle):
         # calculate source strength and source emergence latitude
         source, latsource = cycle_prescription(time, self._pd, self._ovr, self._peak,
                                                self._mult, self._latlo, self._lathi)
+
+        # print("source: ", source)
 
         return source, latsource
 

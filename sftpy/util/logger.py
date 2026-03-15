@@ -78,7 +78,7 @@ class Logger:
             delta = tcheck - self._clock_starts[c]
 
             if msg is not None:
-                print(f"[> {msg} {delta.total_seconds():3f} s <]")
+                print(f"[> {msg} {delta.total_seconds():.03f} s <]")
 
             return delta
 
@@ -93,6 +93,6 @@ class Logger:
                 delta += datetime.now() - self._clock_starts[c]
 
             if msg is not None:
-                print(f"[> {msg} {delta.total_seconds():3f} s <]")
+                print(f"[> {msg} {delta.total_seconds():.03f} s <]")
 
         return timedelta(0)
