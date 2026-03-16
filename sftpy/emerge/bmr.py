@@ -325,17 +325,21 @@ class BMRSchrijver(BMREmerge):
             # number of new concentrations that contain 15e18 Mx w/ at least
             # three equal concentrations per polarity
             percon = np.clip(newflux // 3, a_min=1, a_max=None)
-            percon[newflux > 3 * 15 / binflux] = 15 // binflux
+            percon[percon > 15 // binflux] = 15 // binflux
 
             bulk = np.clip(newflux // percon, a_min=1, a_max=None)
             rest = np.clip(newflux - percon * bulk, a_min=0, a_max=None)
-            
-            nadd = np.ones(ntotal, dtype=np.int64)
-            nadd[newflux >= bulk * percon] = bulk + (rest > 0)
+
+            nadd = bulk + (rest > 0)
+            # nadd = np.ones(ntotal, dtype=np.int64)
+            # nadd[newflux >= bulk * percon] = bulk + (rest > 0)
+            # nadd[newflux >= bulk * percon] = bulk
+            ind_rest = np.cumsum(nadd) - 1
 
             r_nadd = np.repeat(r, nadd)
             sep_nadd = np.repeat(sep, nadd)
             percon_nadd = np.repeat(percon, nadd)
+            percon_nadd[ind_rest] = rest
             nadd_tot = np.sum(nadd)
 
             # one polarity
@@ -381,17 +385,18 @@ class BMRSchrijver(BMREmerge):
             aphi = np.fmod(np.arctan2(y, x) + 2 * np.pi, 2 * np.pi)
             atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
 
-            # TODO add Poisson noise CORRECTLY -- this caused the weird streak
             # this is just an observational thing, no?
             scale_nadd = np.sqrt(percon_nadd)
             noise = rng.normal(scale=scale_nadd)
-            noise = 0.0
 
             # TODO uhh confirm this funky index magic i made up
+            # add both polarities of spots
             aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
-            rest_nz = np.nonzero(rest)
-            aflux[nadd[rest_nz]] = rest[rest_nz]
-            aflux[(nadd+1+nadd_tot)[rest_nz]] = -rest[rest_nz]
+            # rest_nz = np.nonzero(rest)
+            # aflux[nadd[rest_nz]] = rest[rest_nz]
+            # aflux[(nadd+1+nadd_tot)[rest_nz]] = -rest[rest_nz]
+
+            self.log(1, f"flux sum: {np.sum(np.abs(aflux)):.4e}")
 
             """
             if rest != 0:

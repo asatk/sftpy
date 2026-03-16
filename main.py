@@ -66,7 +66,7 @@ def loop():
     dflow2 = DF2(dt/2)
     collide = COL2(loglvl=0)
     fragment = Fragment(rwalk_frag)
-    bmr = BMRSchrijver(map_maker=map_maker, dt=dt, nfluxmax=nfluxmax, loglvl=0)
+    bmr = BMRSchrijver(map_maker=map_maker, dt=dt, nfluxmax=nfluxmax, loglvl=1)
 
     # save synoptic maps at regular intervals
     map_series = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
@@ -155,4 +155,4 @@ if __name__ == "__main__":
     map_series = loop()
     np.save(outfile, map_series)
     plot_aflux(map_series, show=True)
-    anim_syn(map_series, flux_thresh=100, ms=100, show=True)
+    # anim_syn(map_series, flux_thresh=100, ms=100, show=True)
