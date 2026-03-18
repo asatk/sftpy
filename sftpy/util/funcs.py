@@ -48,3 +48,28 @@ def powerlaw_rv(ntotal: int, p: float, lo: float, hi: float, rng):
     rv = (((hi ** pp1 - lo ** pp1) * urv) + lo ** pp1) ** (1 / pp1)
 
     return rv
+
+def schrijver_rv(ntotal: int, p: float, lo: float, hi: float, rng):
+
+    newflux = np.zeros(ntotal, dtype=np.int64)
+    if ntotal == 0:
+        return newflux
+
+    ep = 1 / (1.0 - p)
+    # bf2 = binflux * 2
+    # mbinflux = maxflux / binflux
+
+    newvals = np.astype((p * rng.uniform(size=ntotal) ** ep + 0.5) / 2,
+                        np.int64)
+
+    notvalid = (newvals < lo) | (newvals >= hi)
+
+    while np.any(notvalid):
+        nreplace = np.sum(notvalid)
+        replacevals = np.astype(
+            (p * rng.uniform(size=nreplace) ** ep + 0.5) / 2,
+            np.int64)
+        newvals[notvalid] = replacevals
+        notvalid = (newvals < lo) | (newvals >= hi)
+
+    return newvals
