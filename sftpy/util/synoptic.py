@@ -43,9 +43,10 @@ class MapMaker:
                             theta: np.ndarray,
                             flux: np.ndarray,
                             nflux: int):
+        sinlat = np.cos(theta[:nflux])
         map, phi_edges, theta_edges = np.histogram2d(
-            phi[:nflux], theta[:nflux], weights=flux[:nflux],
+            phi[:nflux], sinlat, weights=flux[:nflux],
             bins=(phibins, thetabins),
-            range=((0, 2 * np.pi), (0, np.pi)))
+            range=((0, 2 * np.pi), (-1, 1)))
         return map
 

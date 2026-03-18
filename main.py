@@ -4,6 +4,7 @@ Main script that runs the Solar Flux Transport model for Python.
 
 """
 
+from matplotlib import pyplot as plt
 import numpy as np
 
 from sftpy import simrc as rc
@@ -66,10 +67,10 @@ def loop():
     dflow2 = DF2(dt/2)
     collide = COL2(loglvl=0)
     fragment = Fragment(rwalk_frag)
-    bmr = BMRSchrijver(map_maker=map_maker, dt=dt, nfluxmax=nfluxmax, loglvl=1)
+    bmr = BMRSchrijver(map_maker=map_maker, dt=dt, nfluxmax=nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
-    map_series = np.empty(((nstep - 1) // savestep + 1, 360, 180), dtype=np.int64)
+    map_series = np.empty((nstep // savestep + 1, 360, 180), dtype=np.int64)
 
     # initialize simulation
     phi, theta, flux, nflux = ini.init()
@@ -79,7 +80,7 @@ def loop():
     map_series[0] = map_curr
 
     logger.clock_start("sim", "Simulation begins:")
-    for i in range(1, nstep):
+    for i in range(1, nstep + 1):
 
         time.step()
         if i % savestep == 0:
@@ -111,6 +112,17 @@ def loop():
 
         phi, theta, flux, nflux = bmr.emerge(
             phi, theta, flux, nflux, source_str, latsource)
+
+        # if i % savestep == 0:
+        #     plot_syn(phi, theta, flux, nflux)
+        #
+        #     plt.show()
+        #     tempbins = np.arcsin(np.linspace(-1+1e-5, 1-1e-5, 180, endpoint=True)) + np.pi/2
+        #     logger.plot(1, "hist", theta[:nflux],
+        #                 weights=np.abs(flux[:nflux]), bins=tempbins, range=(0, np.pi),
+        #                 histtype="step")
+        #     logger.plot(1, "title", "colatitude")
+        #     logger.pshow(1)
 
         # TODO introduce checkpointer
         if i % savestep == 0:
@@ -155,4 +167,4 @@ if __name__ == "__main__":
     map_series = loop()
     np.save(outfile, map_series)
     plot_aflux(map_series, show=True)
-    # anim_syn(map_series, flux_thresh=100, ms=100, show=True)
+    anim_syn(map_series, flux_thresh=100, ms=100, show=True)

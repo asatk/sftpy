@@ -1,13 +1,15 @@
 import numpy as np
 
-from sftpy.viz import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux
+from sftpy.viz import plot_syn, plot_lat, plot_hist, anim_syn, plot_aflux, \
+    anim_map_with_flux
 
 if __name__ == "__main__":
     fname = "maps.npy"
     data = np.load(fname)
     nflux = data.shape[0]
 
-    dt = 21600 * 4 * 30
+    dt = 21600 * 4 * 25
 
-    plot_aflux(data, dt, show=True)
-    anim_syn(data, dt, show=True, ms=100, flux_thresh=30)
+    # plot_aflux(data, dt, show=True)
+    # anim_syn(data, dt, show=True, ms=100, flux_thresh=100)
+    anim_map_with_flux(data, dt, show=True, ms=100)
