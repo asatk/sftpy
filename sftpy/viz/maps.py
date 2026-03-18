@@ -122,9 +122,15 @@ def anim_map_with_flux(maps: np.ndarray,
     axflux.set_ylim(0, None)
     axflux.set_title("Total Absolute Flux")
 
-    line_flux = axflux.axvline(x=time[0], lw=1, c="grey", ls=":")
-    text_flux = axflux.text(time[0]/time[-1], 0.5, f" {time[0]:.01f} yr ",
-                            ha="left", transform=axflux.transAxes)
+    # correction to text location
+    corr = 0.1 * (time - time[-1] / 2) / time[-1]
+    flux_max = axflux.get_ylim()[1]
+
+    point_flux = axflux.scatter(time[0], aflux[0], c="C1", s=25)
+    line_flux = axflux.plot(time[0], aflux[0], c="C1")[0]
+    text_flux = axflux.text(time[0]/time[-1], aflux[0]/flux_max - 0.05, f" {time[0]:.01f} yr ",
+                            ha="center", va="top",
+                            transform=axflux.transAxes)
 
     figa.tight_layout()
 
@@ -132,16 +138,18 @@ def anim_map_with_flux(maps: np.ndarray,
         im.set(data=maps[t])
 
         t_flux = time[t]
-        line_flux.set_xdata([t_flux, t_flux])
+        point_flux.set_offsets([[t_flux, aflux[t]]])
+        line_flux.set_data(time[:t], aflux[:t])
 
-        if t_flux > time[-1] / 2:
-            text_flux.set_ha("right")
-        else:
-            text_flux.set_ha("left")
 
-        text_flux.set_position([t_flux/time[-1], 0.5])
+        # if t_flux > 0.9 * time[-1]:
+        #     text_flux.set_ha("right")
+        # else:
+        #     text_flux.set_ha("left")
+
+        text_flux.set_position([t_flux/time[-1] - corr[t], aflux[t]/flux_max - 0.05])
         text_flux.set_text(f" {t_flux:.01f} yr ")
-        return im, line_flux, text_flux
+        return im, line_flux, text_flux, point_flux
         # title.set_text(f"Frame {t:5d} ({t * dt / 86400:.01f} d)")
         # return im, title
 
