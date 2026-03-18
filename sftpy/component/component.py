@@ -40,3 +40,6 @@ class Component(metaclass=abc.ABCMeta):
         pass the keyword block=False, displaying all figures immediately.
         """
         self._log.plot(loglvl, fname, *plot_args, **plot_kwargs)
+
+    def pshow(self, loglvl: int):
+        self._log.pshow(loglvl)

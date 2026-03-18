@@ -33,6 +33,10 @@ class Logger:
             func = getattr(plt, func_name)
             func(*plot_args, **plot_kwargs)
 
+    def pshow(self, level: int):
+        if level <= self._level:
+            plt.show()
+
     def clock_reset(self, c: int | str):
         if c in self._clocks:
             self._clocks.remove(c)
