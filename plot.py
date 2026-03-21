@@ -10,6 +10,4 @@ if __name__ == "__main__":
 
     dt = 21600 * 4 * 25
 
-    # plot_aflux(data, dt, show=True)
-    # anim_syn(data, dt, show=True, ms=100, flux_thresh=100)
-    anim_map_with_flux(data, dt, show=True, ms=100)
+    anim_map_with_flux(data, dt, show=True, ms=100, format="mkv")

@@ -39,6 +39,9 @@ thr = rc["rwalk.thr"]
 
 rad = rc["physics.rad"]
 
+thetabins = rc["synoptic.thetabins"]
+phibins = rc["synoptic.phibins"]
+
 
 
 class BMREmerge(Component, metaclass=abc.ABCMeta):
@@ -262,8 +265,8 @@ class BMRSchrijver(BMREmerge):
             # 1.4752 is flux to G
             active_thr = 2.5 * avefluxd * 1.47562 / 2 / binflux
             is_active = np.nonzero(newflux >= active_thr)[0]
-            # nactive = len(is_active)
-            nactive = 0
+            nactive = len(is_active)
+            # nactive = 0
             if nactive > 0:
                 # pick nest regions from set of sufficiently large regions
                 will_nest = rng.uniform(size=nactive) < 0.4
@@ -279,8 +282,6 @@ class BMRSchrijver(BMREmerge):
                     self.log(2, f"ind_nest_pick {is_nesting}")
 
                     nest_lat_lim = 50.0
-                    thetabins = 180
-                    phibins = 360
 
                     thetalim = np.int64((1 - np.sin(nest_lat_lim * np.pi / 180)) * thetabins / 2)
 
@@ -290,8 +291,9 @@ class BMRSchrijver(BMREmerge):
                     # TODO check this matmult
                     synoptic = self._map_maker.make_nesting_map(
                         phi, theta, flux, nflux, thr, binflux)
+                    mask = np.outer(yy, xx)
                     # ind = (synoptic * np.outer(yy, xx)) != 0
-                    ind = np.nonzero(np.ravel((synoptic * np.outer(yy, xx))))[0]
+                    ind = np.nonzero(np.ravel((synoptic * mask)))[0]
                     nind = len(ind)
 
                     if nind > 0:
@@ -312,16 +314,6 @@ class BMRSchrijver(BMREmerge):
                         self.log(3, "NEST no nests")
                 else:
                     self.log(3, "NEST no nests")
-
-            # self.plot(1, "hist", newphi, bins=15, range=(0, 2*np.pi))
-            # self.plot(1, "title", "Phi")
-            # self.pshow(1)
-
-            # self.plot(1, "hist", newtheta, bins=90, range=(0, np.pi))
-            # self.plot(1, "title", "Theta")
-            # self.pshow(1)
-                
-
 
             # Step 3 --- orientation of bipole axes
             width = joy_width * np.exp(-binflux * newflux / joy_fold) + sjzero

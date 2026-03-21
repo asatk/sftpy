@@ -53,7 +53,6 @@ def plot_aflux(synoptic_all: np.ndarray,
 
     nframe = synoptic_all.shape[0]
     aflux = np.sum(np.abs(synoptic_all), axis=(1,2))
-    # aflux = np.abs(np.sum(synoptic_all, axis=(1, 2)))
     time = np.arange(nframe) * dt / 86400 / 365
 
     ax.plot(time, aflux)

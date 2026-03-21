@@ -91,16 +91,15 @@ def anim_map_with_flux(maps: np.ndarray,
                        thetabins: int=thetabins,
                        flux_thresh: int=flux_thresh,
                        ms: int=ms,
+                       format: str="gif",
                        show: bool=False):
-    figa, (axmap, axflux) = plt.subplots(nrows=2, ncols=1, figsize=(6, 7))
-
+    figa, (axmap, axflux) = plt.subplots(nrows=2, ncols=1, figsize=(6, 7), dpi=150)
 
     # Carrington Map plot
     maps = np.transpose(maps, axes=(0, 2, 1))
 
     im = axmap.imshow(maps[0], cmap="gray", vmin=-flux_thresh, vmax=flux_thresh,
                    extent=(0, phibins, 0, thetabins), origin="upper")
-    # title = axmap.set_title("Frame {0:5d} ({t * dt / 86400:.01f} d)")
     axmap.set_title("Carrington Map")
     axmap.set_xticks([0, phibins // 2, phibins - 1],
                   labels=["0", r"$\pi$", r"$2\pi$"])
@@ -141,22 +140,19 @@ def anim_map_with_flux(maps: np.ndarray,
         point_flux.set_offsets([[t_flux, aflux[t]]])
         line_flux.set_data(time[:t], aflux[:t])
 
-
-        # if t_flux > 0.9 * time[-1]:
-        #     text_flux.set_ha("right")
-        # else:
-        #     text_flux.set_ha("left")
-
         text_flux.set_position([t_flux/time[-1] - corr[t], aflux[t]/flux_max - 0.05])
         text_flux.set_text(f" {t_flux:.01f} yr ")
         return im, line_flux, text_flux, point_flux
-        # title.set_text(f"Frame {t:5d} ({t * dt / 86400:.01f} d)")
-        # return im, title
 
     ani = anim.FuncAnimation(fig=figa, func=_update_map, frames=nframes,
                              interval=ms, blit=True)
 
-    ani.save(filename="maps_flux.gif", writer="pillow")
+    if format == "gif":
+        ani.save(filename="maps_flux.gif", writer="pillow")
+    elif format == "mp4":
+        ani.save(filename="maps_flux.mp4", writer="ffmpeg")
+    elif format == "mkv":
+        ani.save(filename="maps_flux.mkv", writer="ffmpeg")
 
     if show:
         plt.show()

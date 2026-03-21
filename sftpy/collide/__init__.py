@@ -5,13 +5,12 @@ concentrations. The behavior of the original Schrijver+ model is found in
 of the 'collide modes'.
 """
 
-from .collide import Collide, COLNone
+from .collide import Collide
 from .collide import COL1
 from .collide import COL2
 
 __all__ = [
         "Collide",
-        "COLNone",
         "COL1",
         "COL2",
 ]

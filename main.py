@@ -22,7 +22,7 @@ from sftpy.rwalk import RW0, RW2
 
 from sftpy.misc import WrapPhi, WrapTheta
 from sftpy.util import Logger, MapMaker, Timestep
-from sftpy.viz import plot_syn, anim_syn, plot_aflux
+from sftpy.viz import plot_syn, plot_aflux, anim_map_with_flux
 
 
 def loop():
@@ -167,4 +167,4 @@ if __name__ == "__main__":
     map_series = loop()
     np.save(outfile, map_series)
     plot_aflux(map_series, show=True)
-    anim_syn(map_series, flux_thresh=100, ms=100, show=True)
+    anim_map_with_flux(map_series, flux_thresh=100, ms=100, format="gif", show=True)

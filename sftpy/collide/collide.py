@@ -127,8 +127,6 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     flux_r = flux[:nnew]
 
     l_ret = (phi_r, theta_r, flux_r)
-    # arr_ret = np.stack(l_ret)
-    # return arr_ret
 
     return l_ret
 
@@ -166,26 +164,6 @@ class Collide(Component, metaclass=abc.ABCMeta):
                 flux: np.ndarray,
                 nflux: int):
         ...
-
-
-
-class COLNone(Collide):
-    """
-    No collisions between any flux spots.
-    """
-
-    def collide(self,
-                phi: np.ndarray,
-                theta: np.ndarray,
-                flux: np.ndarray,
-                nflux: int):
-
-        if nflux < 2:
-            return nflux
-
-        nnew = consolidate(phi, theta, nflux)
-        self.log(2, f"spots remaining: {nnew}/{nflux}")
-        return nnew
 
 
 
@@ -365,9 +343,6 @@ class COL1(Collide):
         self.log(2, f"spots remaining: {nnew}/{nflux}")
 
         return nnew
-
-
-
 
 
 
