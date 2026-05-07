@@ -36,13 +36,16 @@ loglvl = rc["component.loglvl"]
 @nb.jit(cache=True)
 def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     sort_idx = np.argsort(theta)
-    phi[:] = phi[sort_idx]
-    theta[:] = theta[sort_idx]
-    flux[:] = flux[sort_idx]
+    # phi[:] = phi[sort_idx]
+    # theta[:] = theta[sort_idx]
+    # flux[:] = flux[sort_idx]
+
+    phi = phi[sort_idx]
+    theta = theta[sort_idx]
+    flux = flux[sort_idx]
 
     neighbors_nz = flux != 0
 
-    # r = phithetaxyz(phi, theta, nflux)
     sintheta = np.sin(theta)
     x = sintheta * np.cos(phi)
     y = sintheta * np.sin(phi)
@@ -69,7 +72,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
                 thetalo += 2 * np.pi
                 lo += nflux
 
-        his[lo] = i
+        # his[lo] = i
 
         hi = his[i]
         thetahi = theta[i] + crphi
@@ -79,41 +82,55 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
                 thetahi -= 2 * np.pi
                 hi -= nflux
 
-        los[hi] = i
+        # los[hi] = i
 
         lcrphi = crphi / sintheta[i]
-        # this won't work if lo > hi
+
         if lo > hi:
             neighbors_theta = np.arange(lo, hi + nflux + 1, dtype=np.int64)
             neighbors_theta = np.mod(neighbors_theta, nflux)
         else:
             neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
 
+        # make sure spots that are marked as empty never get looked at again
+        # neighbors_theta_nz = neighbors_theta[neighbors_nz[neighbors_theta]]
+        # hm accessing neighbors_nz in this way doubles comp time...
+
+
         phi_diff = phi[i] - phi[neighbors_theta]
+        # phi_diff = phi[i] - phi[neighbors_theta_nz]
         phi_dist = np.abs(phi_diff)
         is_near_phi = phi_dist < lcrphi
         neighbors_phi = neighbors_theta[is_near_phi]
+        # neighbors_phi = neighbors_theta_nz[is_near_phi]
 
         r_diff = r[i] - r[neighbors_phi]
         r_dist = np.sum(np.square(r_diff), axis=1)
-        is_near = r_dist < crphi ** 2
-        neighbors = neighbors_phi[is_near]
+        is_near = r_dist < (crphi ** 2)
+        # neighbors = neighbors_phi[is_near]
+
+        neighbors_temp = neighbors_phi[is_near]
+        neighbors = neighbors_temp[flux[neighbors_temp] != 0]
+
+
 
         n_neighbors = len(neighbors)
         if n_neighbors > 1:
+
             np.random.seed(seeds[i])
-            ind_coalesce = np.random.randint(len(neighbors))
+            ind_coalesce = np.random.randint(n_neighbors)
             nbr_coalesce = neighbors[ind_coalesce]
 
             flux_sum = np.sum(flux[neighbors])
 
-            flux[neighbors] = 0.0
-            flux[nbr_coalesce] = flux_sum
-
+            flux[neighbors] = 0
             neighbors_nz[neighbors] = False
-            neighbors_nz[nbr_coalesce] = True
 
-    index = np.nonzero(flux[:nflux])[0]
+            if flux_sum > 0:
+                flux[nbr_coalesce] = flux_sum
+                neighbors_nz[nbr_coalesce] = True
+
+    index = np.nonzero(flux)[0]
     nnew = len(index)
 
     if nnew < nflux:
@@ -153,9 +170,9 @@ class Collide(Component, metaclass=abc.ABCMeta):
         self._difu = diffusion
 
         # collision param from schrijver+ 1997 l=1400km^2/s
-        self._radius = 1400 / meanv * correction
+        self._radius = 1400. / meanv * correction
 
-        self._crphi = self._radius / 7e5
+        self._crphi = self._radius / 7.e5
 
     @abc.abstractmethod
     def collide(self,

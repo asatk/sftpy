@@ -4,7 +4,6 @@ Main script that runs the Solar Flux Transport model for Python.
 
 """
 
-from matplotlib import pyplot as plt
 import numpy as np
 
 from sftpy import simrc as rc
@@ -38,7 +37,7 @@ def loop():
 
     nfluxmax = rc["general.nfluxmax"]
     # TODO confirm that this is same
-    source = rc["cycle.mult"]
+    cycle_mult = rc["cycle.mult"]
 
     t_cycle = rc["cycle.period"]
 
@@ -55,18 +54,18 @@ def loop():
     twrap = WrapTheta()
     crot = CarringtonRotation(dt)
     map_maker = MapMaker(phibins, thetabins)
-    polarconv = ConvergePolarCaps(t_cycle, time)
-    cycle = CYC1(time)
-    rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
+    # polarconv = ConvergePolarCaps(t_cycle, time)
+    cycle = CYC1(time, mult=cycle_mult)
+    # rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
     ini = InitTwo(nfluxmax)
 
-    decay = Decay()
-    rwalk = RW2(dt)
-    mflow = MF2(dt/2)
-    dflow1 = DF2(dt/4)
-    dflow2 = DF2(dt/2)
+    # decay = Decay()
+    # rwalk = RW2(dt)
+    # mflow = MF2(dt/2)
+    # dflow1 = DF2(dt/4)
+    # dflow2 = DF2(dt/2)
     collide = COL2(loglvl=0)
-    fragment = Fragment(rwalk_frag)
+    # fragment = Fragment(rwalk_frag)
     bmr = BMRSchrijver(map_maker=map_maker, dt=dt, nfluxmax=nfluxmax, loglvl=0)
 
     # save synoptic maps at regular intervals
@@ -94,18 +93,18 @@ def loop():
         # polar converge -- remove half of all concentrations after half cycle
         # nflux = polarconv.converge(phi, theta, flux, nflux)
 
-        nflux = decay.decay(phi, theta, flux, nflux)
-        rwalk.move(phi, theta, flux, nflux)
-        dflow1.move(phi, theta, flux, nflux)
-        mflow.move(theta, nflux)
-        dflow2.move(phi, theta, flux, nflux)
-        mflow.move(theta, nflux)
-        dflow1.move(phi, theta, flux, nflux)
+        # nflux = decay.decay(phi, theta, flux, nflux)
+        # rwalk.move(phi, theta, flux, nflux)
+        # dflow1.move(phi, theta, flux, nflux)
+        # mflow.move(theta, nflux)
+        # dflow2.move(phi, theta, flux, nflux)
+        # mflow.move(theta, nflux)
+        # dflow1.move(phi, theta, flux, nflux)
         crot.move(phi, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
         nflux = collide.collide(phi, theta, flux, nflux)
-        nflux = fragment.fragment(phi, theta, flux, nflux)
+        # nflux = fragment.fragment(phi, theta, flux, nflux)
 
         source_str, latsource = cycle.cycle()
         source_str *= inv_pol * 2 - 1
@@ -113,16 +112,7 @@ def loop():
         phi, theta, flux, nflux = bmr.emerge(
             phi, theta, flux, nflux, source_str, latsource)
 
-        # if i % savestep == 0:
-        #     plot_syn(phi, theta, flux, nflux)
-        #
-        #     plt.show()
-        #     tempbins = np.arcsin(np.linspace(-1+1e-5, 1-1e-5, 180, endpoint=True)) + np.pi/2
-        #     logger.plot(1, "hist", theta[:nflux],
-        #                 weights=np.abs(flux[:nflux]), bins=tempbins, range=(0, np.pi),
-        #                 histtype="step")
-        #     logger.plot(1, "title", "colatitude")
-        #     logger.pshow(1)
+        # logger.log(1, f"Signed flux: {np.sum(flux[:nflux])}")
 
         # TODO introduce checkpointer
         if i % savestep == 0:
@@ -162,9 +152,12 @@ def loop():
         
 
 if __name__ == "__main__":
-    outfile = rc["general.outfile"]
+    outpath = rc["general.outpath"]
+
+    outfile = outpath + "/maps.npy"
 
     map_series = loop()
+    print(outpath)
     np.save(outfile, map_series)
     plot_aflux(map_series, show=True)
-    anim_map_with_flux(map_series, flux_thresh=100, ms=100, format="gif", show=True)
+    anim_map_with_flux(map_series, flux_thresh=100, ms=100, fpath=outpath, format="gif", show=True)
