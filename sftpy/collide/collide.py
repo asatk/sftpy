@@ -126,7 +126,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
             flux[neighbors] = 0
             neighbors_nz[neighbors] = False
 
-            if flux_sum > 0:
+            if flux_sum != 0:
                 flux[nbr_coalesce] = flux_sum
                 neighbors_nz[nbr_coalesce] = True
 
