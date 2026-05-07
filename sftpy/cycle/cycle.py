@@ -101,9 +101,7 @@ def cycle_prescription(time: float,
     """
 
     amax = 2 * np.pi * peak / (pd + 2 * ovr)
-    a = np.full(2, amax / peak, dtype=np.float64)
-    a[0] *= np.mod(time + pd, pd)
-    a[1] *= np.mod(time + pd / 2, pd)
+    a = amax / peak * np.mod([time + pd, time + pd / 2], pd)
 
     # 0-year overlap between cycles
     if ovr == 0.0:

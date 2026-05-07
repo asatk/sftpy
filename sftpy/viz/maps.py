@@ -30,12 +30,12 @@ def plot_syn(phi: np.ndarray,
     ind = np.nonzero(h)
     
     im = ax.imshow(h.T, origin='upper', cmap="gray", vmin=-flux_thresh,
-                    vmax=flux_thresh)
+                    vmax=flux_thresh, extent=(0, phibins, 0, thetabins))
     ax.set_title(name)
     ax.set_xlabel(r"Azimuth $\phi$")
     ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
     ax.set_ylabel(r"Colatitude $\theta$")
-    ax.set_yticks([1, 0, -1], labels=[r"$\pi$", r"$\pi/2$", "0"])
+    ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
     cb = plt.colorbar(im, shrink=0.9, cmap="gray")
 
     fig.tight_layout()
@@ -91,6 +91,7 @@ def anim_map_with_flux(maps: np.ndarray,
                        thetabins: int=thetabins,
                        flux_thresh: int=flux_thresh,
                        ms: int=ms,
+                       fpath: str=".",
                        format: str="gif",
                        show: bool=False):
     figa, (axmap, axflux) = plt.subplots(nrows=2, ncols=1, figsize=(6, 7), dpi=150)
@@ -147,12 +148,13 @@ def anim_map_with_flux(maps: np.ndarray,
     ani = anim.FuncAnimation(fig=figa, func=_update_map, frames=nframes,
                              interval=ms, blit=True)
 
+    fname = f"{fpath}/maps_flux.{format}"
     if format == "gif":
-        ani.save(filename="maps_flux.gif", writer="pillow")
+        ani.save(filename=fname, writer="pillow")
     elif format == "mp4":
-        ani.save(filename="maps_flux.mp4", writer="ffmpeg")
+        ani.save(filename=fname, writer="ffmpeg")
     elif format == "mkv":
-        ani.save(filename="maps_flux.mkv", writer="ffmpeg")
+        ani.save(filename=fname, writer="ffmpeg")
 
     if show:
         plt.show()
