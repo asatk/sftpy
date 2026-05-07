@@ -82,7 +82,7 @@ class InitTwo(Initialize):
         theta[:2] += rng.normal(scale=np.pi * 2 / 180, size=2)
 
         # fluxes of two initial spots
-        flux = np.zeros(self._nfluxmax, dtype=np.float64)
+        flux = np.zeros(self._nfluxmax, dtype=np.int64)
         flux[0] = self._flux1 * self._inv_pol
         flux[1] = self._flux2 * self._inv_pol
 
