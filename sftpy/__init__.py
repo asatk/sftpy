@@ -36,7 +36,7 @@ class SimRC(MutableMapping, dict):
         # pattern for section name
         self._psec = re.compile(r"^\[(\w+(\.\w+)*)\]")
         # pattern for key-value pairs -- this can capture wrong things.
-        self._pkvpair = re.compile(r"(\w+)\s*(=|:)\s*(([a-zA-Z0-9._,$\-+](,\s*)?)+)")
+        self._pkvpair = re.compile(r"(\w+)\s*(=|:)\s*(([a-zA-Z0-9._,$\-+/](,\s*)?)+)")
         # pattern for ints
         self._pint = re.compile(r"(\+|-|(0(x|b)))?(\d+_)*\d+")
         # pattern for floats
