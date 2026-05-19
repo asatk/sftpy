@@ -26,8 +26,7 @@ correction = rc["collide.correction"]
 meanv = rc["collide.meanv"]
 diffusion = rc["physics.diffusion"]
 loglvl = rc["component.loglvl"]
-
-
+rad = rc["physics.rad"]
 
 
 
@@ -36,6 +35,9 @@ loglvl = rc["component.loglvl"]
 @nb.jit(cache=True)
 def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     sort_idx = np.argsort(theta)
+
+    ### > COMPARE PERFORMANCE
+
     # phi[:] = phi[sort_idx]
     # theta[:] = theta[sort_idx]
     # flux[:] = flux[sort_idx]
@@ -43,6 +45,8 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     phi = phi[sort_idx]
     theta = theta[sort_idx]
     flux = flux[sort_idx]
+
+    ### <
 
     neighbors_nz = flux != 0
 
@@ -57,6 +61,8 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     los = np.mod(los, nflux)
     his = np.arange(skips, nflux + skips, dtype=np.int64)
     his = np.mod(his, nflux)
+
+    # flux_lost = 0.0
 
     # calculate finding neighbors in parallel and coalesce sequentially?
     for i in order:
@@ -112,16 +118,36 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
         neighbors_temp = neighbors_phi[is_near]
         neighbors = neighbors_temp[flux[neighbors_temp] != 0]
 
+        # cond = ~neighbors_nz & (flux != 0)
+        # if np.any(cond):
+        #     print(f"Non-zero spots marked as empty: {np.sum(cond)}")
 
 
         n_neighbors = len(neighbors)
         if n_neighbors > 1:
+
+            # bad1 = np.any(flux[neighbors] == 0)
+            # bad2 = np.any(~neighbors_nz[neighbors])
+            # if bad1 and bad2:
+            #     print("/!\\ NO FLUX + PRESENT IN NZ")
+            # elif bad1 and not bad2:
+            #     print("/!\\ NO FLUX /!\\")
+            #
+            #     print(len(neighbors_theta))
+            #     print(flux[neighbors_theta])
+            #
+            #     print(len(neighbors_theta_nz))
+            #     print(flux[neighbors_theta_nz])
+            #
+            #     print(len(neighbors))
+            #     print(flux[neighbors])
 
             np.random.seed(seeds[i])
             ind_coalesce = np.random.randint(n_neighbors)
             nbr_coalesce = neighbors[ind_coalesce]
 
             flux_sum = np.sum(flux[neighbors])
+            # flux_lost += np.sum(np.abs(flux[neighbors])) - np.abs(flux_sum)
 
             flux[neighbors] = 0
             neighbors_nz[neighbors] = False
@@ -129,6 +155,8 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
             if flux_sum != 0:
                 flux[nbr_coalesce] = flux_sum
                 neighbors_nz[nbr_coalesce] = True
+
+    # print(f"flux lost: {flux_lost}")
 
     index = np.nonzero(flux)[0]
     nnew = len(index)
@@ -171,8 +199,10 @@ class Collide(Component, metaclass=abc.ABCMeta):
 
         # collision param from schrijver+ 1997 l=1400km^2/s
         self._radius = 1400. / meanv * correction
+        # npix = 2
+        # self._radius = npix * rad * np.pi / 180.0
 
-        self._crphi = self._radius / 7.e5
+        self._crphi = self._radius / rad
 
     @abc.abstractmethod
     def collide(self,
@@ -181,84 +211,6 @@ class Collide(Component, metaclass=abc.ABCMeta):
                 flux: np.ndarray,
                 nflux: int):
         ...
-
-
-
-class COLScan(Collide):
-    """
-    Collide by scanning over phi
-    """
-
-    def collide(self,
-                phi: np.ndarray,
-                theta: np.ndarray,
-                flux: np.ndarray,
-                nflux: int):
-
-
-        # permutation of indices based on value of phi
-        perm = np.argsort(phi[:nflux])
-        psort = phi[perm]
-        tsort = theta[perm]
-        fsort = flux[perm]
-
-        r = self._collide_start(psort, tsort, fsort, nflux)
-
-        # tunable param: size of 2D arrays for computation. choose btwn 1k-10k
-        n = 1000
-
-
-        minphi = 0.0
-        maxphi = phi[:n]
-
-        lo = 0
-        hi = n
-
-        while hi < nflux:
-
-            # spots of opposite-signed flux that can "collide"
-            signs = np.add.outer(np.sign(fsort[lo:hi]), np.sign(fsort[lo:hi]))
-            ind_opp = signs == 0
-
-            # determine distances between spots
-            dists = np.sqrt(np.sum(np.square(np.apply_along_axis(
-                lambda arr: np.subtract.outer(arr, arr), 0, r)), axis=2))
-            ind_close = dists < self._critical
-
-            # exclude connection to self
-            ind_self = ~(np.eye(hi-lo) == 1)
-
-            # spots that collide have opposite-polarity fluxes and are nearby
-            ind_col = ind_opp & ind_close & ind_self
-
-            # locate concentrations that can collide (have opposite-pol neighbors)
-            where_col = np.nonzero(np.any(ind_col, axis=1))[0]
-
-            # coalesce spots until none remain
-            while len(where_col) > 0:
-
-                # choose one spot to be the "hub" into which its neighbors coalesce
-                hub = rng.choice(where_col)
-
-                # identify neighbors
-                nbrs = np.nonzero(ind_col[hub])[0]
-
-                # calculate total flux to be added to hub spot
-                hubflux = np.sum(fsort[nbrs])
-                
-                # add coalesced flux to hub
-                fsort[hub] += hubflux
-
-                # remove connections to coalesced spots
-                ind_col[nbrs] = False
-                ind_col[:,nbrs] = False     # could potentially remove w/ slick coding
-
-                # zero out coalesced spots
-                fsort[nbrs] = 0
-
-                # locate concentrations that can collide after coalescing prev
-                where_col = np.nonzero(np.any(ind_col, axis=1))[0]
-            ...
 
 
 
@@ -392,9 +344,10 @@ class COL2(Collide):
         if nflux < 2:
             return nflux
 
+        fluxtot_pre = np.sum(np.abs(flux[:nflux]))
+
         # number of indices that can be skipped must be no more than the total number of spots
         skips = min(self._range, nflux)
-        # skips = nflux // 1000 + 1
         crphi = self._crphi
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
         seeds = rng.integers(low=2 ** 32 - 1, size=nflux, dtype=np.uint32)
@@ -414,6 +367,9 @@ class COL2(Collide):
         theta[:nnew] = theta_r.copy()
         flux[:nnew] = flux_r.copy()
 
-        self.log(2, f"spots remaining: {nnew}/{nflux}")
+        fluxtot_post = np.sum(np.abs(flux[:nnew]))
+
+        # self.log(1, f"delta nflux: {nnew-nflux:6d} / {nflux}\t" + \
+        #          f"delta flux : {fluxtot_post-fluxtot_pre:7d} / {fluxtot_post}")
 
         return nnew

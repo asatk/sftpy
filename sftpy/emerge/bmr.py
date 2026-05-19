@@ -5,32 +5,37 @@
 import abc
 import numpy as np
 
+from matplotlib import pyplot as plt
+from ..viz import plot_syn
+
 from sftpy import simrc as rc
 from sftpy import rng
 
 from ..component import Component
-from ..util import powerlaw_rv, MapMaker
+from ..cycle import Cycle
+from ..util import powerlaw_rv, schrijver_rv
+from ._nesting import identify_nesting_plages
+
+as_specified = rc["schrijver.as_specified"]
 
 binflux= rc["physics.binflux"]
 nfluxmax = rc["general.nfluxmax"]
-# TODO change - just checking if cycle exists and what dir/sign?
-cyl_mult = rc["cycle.mult"]
 dt = rc["general.dt"]
 loglvl = rc["general.loglvl"]
+
+cyl_mult = rc["cycle.mult"]
+
 
 # orientation
 joy = rc["schrijver.joy"]
 joy_width = rc["schrijver.joy_width"]
 joy_fold = rc["schrijver.joy_fold"]
 sjzero = rc["schrijver.sjzero"]
-
 max_lat = rc["schrijver.max_lat"]
 lat_width = rc["schrijver.lat_width"]
 lat_fold = rc["schrijver.lat_fold"]
-
 turbulent = rc["schrijver.turbulent"]
 psource = rc["schrijver.psource"]
-
 avefluxd = rc["schrijver.avefluxd"]
 miniflux = rc["schrijver.miniflux"]
 maxflux = rc["schrijver.maxflux"]
@@ -65,9 +70,7 @@ class BMREmerge(Component, metaclass=abc.ABCMeta):
                phi: np.ndarray,
                theta: np.ndarray,
                flux: np.ndarray,
-               nflux: int,
-               source: np.ndarray,
-               latsource: np.ndarray):
+               nflux: int):
         ...
 
 
@@ -88,9 +91,7 @@ class BMRAssimilate(BMREmerge):
                phi: np.ndarray,
                theta: np.ndarray,
                flux: np.ndarray,
-               nflux: int,
-               source: np.ndarray=None,
-               latsource: np.ndarray=None):
+               nflux: int):
         ...
 
 
@@ -148,28 +149,38 @@ class BMRSchrijver(BMREmerge):
     prefix = "[bmr-cjs]"
 
     def __init__(self,
-                 map_maker: MapMaker,
+                 cycle: Cycle,
                  dt: float=dt,
                  nfluxmax: int=nfluxmax,
-                 as_specified: bool=True,
+                 as_specified: bool=False,
                  gradual: bool=False,
                  loglvl: int=loglvl):
         super().__init__(dt, nfluxmax, loglvl)
-        self._map_maker = map_maker
+        self._cycle = cycle
         self._as_specified = as_specified   # fast forward/no ER/not full res
         self._gradual = gradual
+
+    @property
+    def as_specified(self):
+        return self._as_specified
+
+    @as_specified.setter
+    def as_specified(self, value):
+        self._as_specified = value
 
     def emerge(self,
                phi: np.ndarray,
                theta: np.ndarray,
                flux: np.ndarray,
-               nflux: int,
-               source: np.ndarray,
-               latsource: np.ndarray):
+               nflux: int):
 
         dt = self._dt
-        as_specified = self._as_specified
         gradual = self._gradual
+
+        nflux_pre = nflux
+        flux_pre = np.sum(np.abs(flux[:nflux]))
+
+        source, latsource = self._cycle.cycle()
 
         # TODO what can we vectorize / pull out of loop?
         for i in range(len(source)):
@@ -193,7 +204,8 @@ class BMRSchrijver(BMREmerge):
             frac = ntotal1 - int(ntotal1)
             ntotal1 = int(ntotal1) + (rng.uniform() < frac)
 
-            rv1 = powerlaw_rv(ntotal1, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            # rv1 = powerlaw_rv(ntotal1, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            rv1 = schrijver_rv(ntotal1, p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
             newflux1 = np.astype(rv1, np.int64)
 
 
@@ -209,49 +221,49 @@ class BMRSchrijver(BMREmerge):
             frac = ntotal2 - int(ntotal2)
             ntotal2 = int(ntotal2) + (rng.uniform() < frac)
 
-            rv2 = powerlaw_rv(ntotal2, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            # rv2 = powerlaw_rv(ntotal2, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            rv2 = schrijver_rv(ntotal2, p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
             newflux2 = np.astype(rv2, np.int64)
 
             newflux = np.r_[newflux1, newflux2]
             ntotal = len(newflux)
-        
+
+            # accelerated time mode -- include only regions larger than 2sq deg
+            # or 2 * 1.5e18 & avefluxd = 3 avefluxd units of 10^18 Mx/m^2
+            # IDL model behavior includes all and only ephemeral regions if
+            # cycle source strength relative to Sun is negative
+
+            self.log(1, f"Cycle ({i}) strength: {source[i]:.05f}")
+            self.log(1,
+                     f"Active = {ntotal1}\t" + \
+                     f"Ephemeral = {ntotal2}\t" + \
+                     "All = {ntotal}")
+
+            # fast forward stuff from old model
+            # only emerge active regions
+            if not self._as_specified and cyl_mult > 0:
+                ind_big = np.nonzero(newflux > (3 * avefluxd / binflux))[0]
+                if len(ind_big) == 0:
+                    return phi, theta, flux, nflux
+                newflux = newflux[ind_big]
+                ntotal = len(newflux)
+
+            # old test mode for negative cycle mult which should be a flag; alas
+            # only emerge ephemeral regions
+            if cyl_mult < 0:
+                ind_small = np.nonzero(newflux < (3 * avefluxd / binflux))[0]
+                if len(ind_small) == 0:
+                    return phi, theta, flux, nflux
+                newflux = newflux[ind_small]
+                ntotal = len(newflux)
+
+
             if ntotal == 0:
                 continue
-
-            self.log(1, f"Cycle ({i}) strength: {source[i]:.3e}")
-            self.log(1, f"Active = {ntotal1}\tEphemeral = {ntotal2}\tAll = {ntotal}")
-
-            # TODO -- this mode emerges nothing...
-            # accelerated-time mode; leave out ephemeral regions
-            # regions that are 2 sq deg or larger, i.e.,
-            # 2*1.5e18*avefluxd/1e18 = 3 avefluxd units of 1e18
-            # cyl_mult < 0 is some test mode
-            if not as_specified and cyl_mult > 0:
-                self.log(2, f"NEWFLUX {newflux}")
-                index = newflux > (3 * avefluxd / binflux)
-                if not np.any(index):
-                    self.log(2, "NO SOURCES PASS THRESHOLD")
-                    return phi, theta, flux, nflux
-                newflux = newflux[index]
-                ntotal = len(newflux)
-
-            # testrun mode -- include only ephemeral regions
-            if cyl_mult < 0:
-                index = newflux < (3 * avefluxd / binflux)
-                if not np.any(index):
-                    return phi, theta, flux, nflux
-                newflux = newflux[index]
-                ntotal = len(newflux)
-
-
 
             # Step 2 --- determine positions
             newphi = rng.uniform(high=2*np.pi, size=ntotal)
             newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
-            # self.log(1, f"Lat source: {latsource[i]}")
-            # self.plot(1, "hist", newtheta, bins=90, range=(-np.pi/2, np.pi/2))
-            # self.plot(1, "title", "Pre-Spread Latitude")
-            # self.pshow(1)
             width = lat_width * (np.exp(-newflux * binflux / lat_fold) + 0.15)
             newtheta += rng.normal(scale=width*np.pi/180, size=ntotal)
             # TODO introduced this myself just to prevent stuff from going oob
@@ -266,54 +278,62 @@ class BMRSchrijver(BMREmerge):
             active_thr = 2.5 * avefluxd * 1.47562 / 2 / binflux
             is_active = np.nonzero(newflux >= active_thr)[0]
             nactive = len(is_active)
-            # nactive = 0
             if nactive > 0:
                 # pick nest regions from set of sufficiently large regions
                 will_nest = rng.uniform(size=nactive) < 0.4
                 nnest = np.sum(will_nest)
 
+                self.log(3, f"NEST nactive = {nactive}")
+
                 # pick new location inside plage regions but not at polar caps
                 # limits emergence to lat +/- deg
                 if nnest > 0:
                     is_nesting = is_active[will_nest]
-                    self.log(2, f"nnest={nactive}   npick={nnest}")
-                    self.log(2, f"ind_nest {is_active}")
-                    self.log(2, f"ind_pick {will_nest}")
-                    self.log(2, f"ind_nest_pick {is_nesting}")
+                    self.log(3, f"NEST nnest = {nnest}")
+
+                    # NOTE: nesting plages identified in IDL model much earlier
+                    # than immediately after sampling new spots. before flows,
+                    # fragmentation, and collisions.
 
                     nest_lat_lim = 50.0
+                    is_plage = identify_nesting_plages(
+                        phi, theta, flux, nflux, thr, binflux,
+                        phibins, thetabins, nest_lat_lim)
+                    is_plage_px = np.nonzero(np.ravel(is_plage))[0]
+                    nplage = len(is_plage_px)
 
-                    thetalim = np.int64((1 - np.sin(nest_lat_lim * np.pi / 180)) * thetabins / 2)
+                    if self._loglvl >= 3:
+                        plot_syn(phi, theta, flux, nflux, show=True)
 
-                    xx = np.zeros(thetabins, dtype=np.byte)
-                    xx[thetalim:-thetalim] = 1
-                    yy = np.ones(phibins, dtype=np.byte)
-                    # TODO check this matmult
-                    synoptic = self._map_maker.make_nesting_map(
-                        phi, theta, flux, nflux, thr, binflux)
-                    mask = np.outer(yy, xx)
-                    # ind = (synoptic * np.outer(yy, xx)) != 0
-                    ind = np.nonzero(np.ravel((synoptic * mask)))[0]
-                    nind = len(ind)
+                    self.plot(3, "imshow", is_plage.T)
+                    self.pshow(3)
 
-                    if nind > 0:
-                        nreplace = min(nnest, nind)
+                    self.log(3, f"NEST nplage = {nplage}")
+
+                    if nplage > 0:
+                        nreplace = min(nnest, nplage)
                         self.log(3, f"NEST nreplace = {nreplace}")
-                        point = rng.choice(ind, replace=False, size=nreplace)
+                        point = rng.choice(is_plage_px, replace=False, size=nreplace)
                         point = np.astype(point, np.int64)
                         lat = point // phibins
 
                         # TODO check the  +1 on these
-                        self.log(3, f"NEST point = {point.shape}")
-                        self.log(3, f"NEST lat = {lat.shape}")
-                        self.log(3, f"NEST ind_nest_picks = {is_nesting.shape}")
-                        self.log(3, f"NEST new_phi = {newphi.shape}")
-                        newphi[is_nesting[:nreplace]] = point - phibins * lat
-                        newtheta[is_nesting[:nreplace]] = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
+                        nest_newphi = point - phibins * lat
+                        nest_newtheta = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
+                        newphi[is_nesting[:nreplace]] = nest_newphi
+                        newtheta[is_nesting[:nreplace]] = nest_newtheta
+
+                        self.log(3, f"NEST point: {point}")
+                        self.log(3, f"NEST lat: {lat}")
+                        self.log(3, f"NEST newphi: {nest_newphi}")
+                        self.log(3, f"NEST newlat: {nest_newtheta}")
+
                     else:
-                        self.log(3, "NEST no nests")
+                        self.log(3, "NEST no plage regions")
                 else:
-                    self.log(3, "NEST no nests")
+                    self.log(3, "NEST no nesting regions")
+            else:
+                self.log(3, "NEST no new active regions")
 
             # Step 3 --- orientation of bipole axes
             width = joy_width * np.exp(-binflux * newflux / joy_fold) + sjzero
@@ -332,13 +352,17 @@ class BMRSchrijver(BMREmerge):
             sep = np.clip(r, a_min=9000/rad/2, a_max=None)
             # number of new concentrations that contain 15e18 Mx w/ at least
             # three equal concentrations per polarity
-            percon = np.clip(newflux // 3, a_min=1, a_max=None)
-            percon[percon > 15 // binflux] = 15 // binflux
+            percon = np.clip(newflux / 3., a_min=1, a_max=None)
+            percon[percon > (15. / binflux)] = 15. / binflux
 
-            bulk = np.clip(newflux // percon, a_min=1, a_max=None)
+            # bulk = np.clip(newflux // percon, a_min=1, a_max=None)
+            bulk = np.clip(np.astype(
+                newflux / percon, np.int64),
+                a_min=1, a_max=None)
             rest = np.clip(newflux - percon * bulk, a_min=0, a_max=None)
 
             nadd = bulk + (rest > 0)
+            nadd[newflux < bulk * percon] = 1
             ind_rest = np.cumsum(nadd) - 1
 
             r_nadd = np.repeat(r, nadd)
@@ -397,6 +421,11 @@ class BMRSchrijver(BMREmerge):
 
             # add both polarities of spots
             aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
+
+            # IDL code has remainder concentration w/o noise...
+            aflux[ind_rest] = aflux[ind_rest] - noise[ind_rest]
+            aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[ind_rest]
+            aflux = np.astype(aflux, np.int64)
 
             # self.log(1, f"flux sum: {np.sum(np.abs(aflux)):.4e}")
             
@@ -462,6 +491,8 @@ class BMRSchrijver(BMREmerge):
                 theta = theta_cp
                 flux = flux_cp
 
+            # self.log(0, f"added nspots: {nadd_tot}")
+
             phi[nflux:nflux+2*nadd_tot] = aphi
             theta[nflux:nflux+2*nadd_tot] = atheta
             flux[nflux:nflux+2*nadd_tot] = aflux
@@ -469,6 +500,12 @@ class BMRSchrijver(BMREmerge):
             nflux += nadd_tot * 2
 
             # self.log(1, f"add {nadd_tot}")
+
+        nflux_post = nflux
+        flux_post = np.sum(np.abs(flux[:nflux]))
+
+        self.log(1, f"delta nflux: {nflux_post - nflux_pre:6d} / {nflux_pre}\t" + \
+                 f"delta flux : {flux_post - flux_pre:7d} / {flux_pre}")
 
 
         return phi, theta, flux, nflux

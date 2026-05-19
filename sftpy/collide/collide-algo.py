@@ -373,3 +373,78 @@ class COL3(Collide):
                     flux[ind2] = 0
 
         return self._collide_finish(phi, theta, flux, nflux)
+
+
+class COLScan(Collide):
+    """
+    Collide by scanning over phi
+    """
+
+    def collide(self,
+                phi: np.ndarray,
+                theta: np.ndarray,
+                flux: np.ndarray,
+                nflux: int):
+
+        # permutation of indices based on value of phi
+        perm = np.argsort(phi[:nflux])
+        psort = phi[perm]
+        tsort = theta[perm]
+        fsort = flux[perm]
+
+        r = self._collide_start(psort, tsort, fsort, nflux)
+
+        # tunable param: size of 2D arrays for computation. choose btwn 1k-10k
+        n = 1000
+
+        minphi = 0.0
+        maxphi = phi[:n]
+
+        lo = 0
+        hi = n
+
+        while hi < nflux:
+
+            # spots of opposite-signed flux that can "collide"
+            signs = np.add.outer(np.sign(fsort[lo:hi]), np.sign(fsort[lo:hi]))
+            ind_opp = signs == 0
+
+            # determine distances between spots
+            dists = np.sqrt(np.sum(np.square(np.apply_along_axis(
+                lambda arr: np.subtract.outer(arr, arr), 0, r)), axis=2))
+            ind_close = dists < self._critical
+
+            # exclude connection to self
+            ind_self = ~(np.eye(hi - lo) == 1)
+
+            # spots that collide have opposite-polarity fluxes and are nearby
+            ind_col = ind_opp & ind_close & ind_self
+
+            # locate concentrations that can collide (have opposite-pol neighbors)
+            where_col = np.nonzero(np.any(ind_col, axis=1))[0]
+
+            # coalesce spots until none remain
+            while len(where_col) > 0:
+                # choose one spot to be the "hub" into which its neighbors coalesce
+                hub = rng.choice(where_col)
+
+                # identify neighbors
+                nbrs = np.nonzero(ind_col[hub])[0]
+
+                # calculate total flux to be added to hub spot
+                hubflux = np.sum(fsort[nbrs])
+
+                # add coalesced flux to hub
+                fsort[hub] += hubflux
+
+                # remove connections to coalesced spots
+                ind_col[nbrs] = False
+                ind_col[
+                    :, nbrs] = False  # could potentially remove w/ slick coding
+
+                # zero out coalesced spots
+                fsort[nbrs] = 0
+
+                # locate concentrations that can collide after coalescing prev
+                where_col = np.nonzero(np.any(ind_col, axis=1))[0]
+            ...
