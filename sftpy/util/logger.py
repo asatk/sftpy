@@ -2,6 +2,13 @@ from datetime import datetime
 from datetime import timedelta
 from matplotlib import pyplot as plt
 
+from .timestep import Timestep
+
+
+
+# singleton empty/null return value for clocks
+null_time = timedelta(0)
+
 class Logger:
     """
     Class for logging outputs for each component. Usually internal to each
@@ -69,7 +76,7 @@ class Logger:
             if msg is not None:
                 print(f"[> {msg} {delta.total_seconds()} <]")
 
-        return timedelta(0)
+        return null_time
 
     def clock_check(self, c: int | str, msg: str=None):
         if c in self._clocks:
@@ -86,7 +93,7 @@ class Logger:
 
             return delta
 
-        return timedelta(0)
+        return null_time
 
     def clock_delta(self, c: int | str, msg: str=None):
         if c in self._clocks:
@@ -99,4 +106,53 @@ class Logger:
             if msg is not None:
                 print(f"[> {msg} {delta.total_seconds():.03f} s <]")
 
-        return timedelta(0)
+        return null_time
+
+
+
+class TimedLogger(Logger):
+
+    def __init__(self,
+                 timestep: Timestep,
+                 frequency: int,
+                 level: int,
+                 prefix: str):
+        super().__init__(level, prefix)
+        self._timestep = timestep
+        self._frequency = frequency
+
+    def log(self, level: int, msg: str):
+        if self._timestep.getstep() % self._frequency == 0:
+            super().log(level, msg)
+
+    def plot(self, level: int, func_name: str, *plot_args, **plot_kwargs):
+        if self._timestep.getstep() % self._frequency == 0:
+            super().plot(level, func_name, *plot_args, **plot_kwargs)
+
+    def pshow(self, level: int):
+        if self._timestep.getstep() % self._frequency == 0:
+            super().pshow(level)
+
+    def clock_reset(self, c: int | str):
+        if self._timestep.getstep() % self._frequency == 0:
+            super().clock_reset(c)
+
+    def clock_start(self, c: int | str, msg: str = None):
+        if self._timestep.getstep() % self._frequency == 0:
+            return super().clock_start(c, msg)
+        return null_time
+
+    def clock_stop(self, c: int | str, msg: str = None):
+        if self._timestep.getstep() % self._frequency == 0:
+            return super().clock_stop(c, msg)
+        return null_time
+
+    def clock_check(self, c: int | str, msg: str = None):
+        if self._timestep.getstep() % self._frequency == 0:
+            return super().clock_check(c, msg)
+        return null_time
+
+    def clock_delta(self, c: int | str, msg: str = None):
+        if self._timestep.getstep() % self._frequency == 0:
+            return super().clock_delta(c, msg)
+        return null_time

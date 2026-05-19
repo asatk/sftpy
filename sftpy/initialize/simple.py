@@ -13,7 +13,6 @@ lat1 = rc["initialize.simple.lat1"]
 lat2 = rc["initialize.simple.lat2"]
 flux1 = rc["initialize.simple.flux1"]
 flux2 = rc["initialize.simple.flux2"]
-inv_pol = rc["cycle.inv_pol"]
 loglvl = rc["general.loglvl"]
 
 class InitTwo(Initialize):
@@ -30,7 +29,6 @@ class InitTwo(Initialize):
                  lat2: float=lat2,
                  flux1: int=flux1,
                  flux2: int=flux2,
-                 inv_pol: int=inv_pol,
                  loglvl: int=loglvl):
         """
         Create `InitSimple` component, optionally specifying the longitudes,
@@ -62,7 +60,6 @@ class InitTwo(Initialize):
         self._lat2 = lat2
         self._flux1 = flux1
         self._flux2 = flux2
-        self._inv_pol = inv_pol
 
     def init(self):
         
@@ -83,8 +80,8 @@ class InitTwo(Initialize):
 
         # fluxes of two initial spots
         flux = np.zeros(self._nfluxmax, dtype=np.int64)
-        flux[0] = self._flux1 * self._inv_pol
-        flux[1] = self._flux2 * self._inv_pol
+        flux[0] = self._flux1
+        flux[1] = self._flux2
 
         # two spots
         nflux = 2
@@ -103,13 +100,11 @@ class InitOne(Initialize):
                  lng1: float=lng1,
                  lat1: float=lat1,
                  flux1: int=flux1,
-                 inv_pol: int=inv_pol,
                  loglvl: int=loglvl):
         super().__init__(nfluxmax, loglvl)
         self._lng1 = lng1
         self._lat1 = lat1
         self._flux1 = flux1
-        self._inv_pol = inv_pol
 
     def init(self):
 

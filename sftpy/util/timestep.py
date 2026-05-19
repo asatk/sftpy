@@ -32,6 +32,13 @@ class Timestep():
     def gettime(self):
         return self._time
 
+    def settime(self, t: float):
+        self._time = t
+
+    def reset(self):
+        self._time = t_init
+        self._step = 0
+
     def step(self):
         self._time += self._dt
         self._step += 1
