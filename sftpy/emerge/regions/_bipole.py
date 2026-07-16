@@ -1,12 +1,17 @@
 import numpy as np
 
-from ..component import Component
-from ..util import schrijver_rv
-from ..util import powerlaw_rv
+from sftpy import rng
 
 
 
-class BipoleRegion(Component):
+from ...util import schrijver_rv
+from ...util import powerlaw_rv
+
+from ._magneticregion import MagneticRegion
+
+
+
+class BipoleRegion(MagneticRegion):
 
     prefix = "[bipole]"
 
@@ -25,10 +30,12 @@ class BipoleRegion(Component):
                  sjzero: float,
                  rad: float,
                  binflux: float,
-                 rng: np.random.Generator,
+                 mode_ar: int=1,
+                 mode_eph: int=1,
                  loglvl: int=0
                  ):
         super().__init__(loglvl)
+
         self._p = p
         self._minflux = minflux
         self._maxflux = maxflux
@@ -50,13 +57,43 @@ class BipoleRegion(Component):
         self._rad = rad
 
         self._binflux = binflux
-        self._rng = rng
+
+        self._mode_ar = mode_ar
+        self._mode_eph = mode_eph
+
+
+
+    @property
+    def mode_ar(self):
+        return self._mode_ar
+
+    @mode_ar.setter
+    def mode_ar(self, value):
+        self._mode_ar = value
+
+    def toggle_mode_ar(self):
+        self._mode_ar = not self._mode_ar
+
+    @property
+    def mode_eph(self):
+        return self._mode_eph
+
+    @mode_eph.setter
+    def mode_eph(self, value):
+        self._mode_eph = value
+
+    def toggle_mode_eph(self):
+        self._mode_eph = not self._mode_eph
+
+
 
     def _init_flux_ar(self):
         pm1 = self._p - 1
         scale = (1.5 * self._avefluxd) ** pm1 / -pm1
         rangefactor = self._maxflux ** -pm1 - self._minflux ** -pm1
         self._ntotalfactor_ar = 2 * self._dt / 86400 * scale * rangefactor
+
+
 
     def _init_flux_eph(self):
         p = self._p + 1
@@ -66,34 +103,41 @@ class BipoleRegion(Component):
         self._ntotalfactor_eph = 2 * self._dt / 86400 * scale * rangefactor
 
 
-    def sample_flux(self, source: float):
-        rng = self._rng
 
+    def sample_flux(self, source: float):
         source = np.abs(source)
 
         ## [1] High-flux tail dominant for large regions
-        a = 8 * source
-        ntotal_ar = a * self._ntotalfactor_ar
-        frac_ar = ntotal_ar - int(ntotal_ar)
-        ntotal_ar = int(ntotal_ar) + (rng.uniform() < frac_ar)
+        if self._mode_ar:
+            a = 8 * source
+            ntotal_ar = a * self._ntotalfactor_ar
+            frac_ar = ntotal_ar - int(ntotal_ar)
+            ntotal_ar = int(ntotal_ar) + (rng.uniform() < frac_ar)
 
-        # rv_ar = powerlaw_rv(ntotal_ar, -self._p, self._minflux / 2 / binflux,
-        #                     self._maxflux / 2 / binflux, rng)
-        rv_ar = schrijver_rv(ntotal_ar, self._p, self._minflux / 2 / self._binflux,
-                              self._maxflux / 2 / self._binflux, rng)
-        flux_ar = np.astype(rv_ar, np.int64)
+            # rv_ar = powerlaw_rv(ntotal_ar, -self._p, self._minflux / 2 / binflux,
+            #                     self._maxflux / 2 / binflux, rng)
+            rv_ar = schrijver_rv(ntotal_ar, self._p, self._minflux / 2 / self._binflux,
+                                  self._maxflux / 2 / self._binflux, rng)
+            flux_ar = np.astype(rv_ar, np.int64)
+        else:
+            ntotal_ar = 0
+            flux_ar = np.zeros(0)
 
         ## [2] Low-flux tail dominated by ephemeral regions
-        a = 8 * source ** (1 / 3) * self._turbulent + (1 - self._turbulent)
-        ntotal_eph = a * self._ntotalfactor_eph
-        frac_eph = ntotal_eph - int(ntotal_eph)
-        ntotal_eph = int(ntotal_eph) + (self._rng.uniform() < frac_eph)
+        if self._mode_eph:
+            a = 8 * source ** (1 / 3) * self._turbulent + (1 - self._turbulent)
+            ntotal_eph = a * self._ntotalfactor_eph
+            frac_eph = ntotal_eph - int(ntotal_eph)
+            ntotal_eph = int(ntotal_eph) + (rng.uniform() < frac_eph)
 
-        # rv_eph = powerlaw_rv(ntotal_eph, -self._p + 1,self._minflux / 2 / binflux,
-        #                      self._maxflux / 2 / binflux, rng)
-        rv_eph = schrijver_rv(ntotal_eph, self._p + 1, self._minflux / 2 / self._binflux,
-                           self._maxflux / 2 / self._binflux, rng)
-        flux_eph = np.astype(rv_eph, np.int64)
+            # rv_eph = powerlaw_rv(ntotal_eph, -self._p + 1,self._minflux / 2 / binflux,
+            #                      self._maxflux / 2 / binflux, rng)
+            rv_eph = schrijver_rv(ntotal_eph, self._p + 1, self._minflux / 2 / self._binflux,
+                               self._maxflux / 2 / self._binflux, rng)
+            flux_eph = np.astype(rv_eph, np.int64)
+        else:
+            ntotal_eph = 0
+            flux_eph = np.zeros(0)
 
         self.log(1,
                  f"Active = {ntotal_ar}\t" + \
@@ -101,14 +145,44 @@ class BipoleRegion(Component):
                  f"All = {ntotal_ar + ntotal_eph}")
 
         flux = np.r_[flux_ar, flux_eph]
+
+        # accelerated time mode -- include only regions larger than 2sq deg
+        # or 2 * 1.5e18 & avefluxd = 3 avefluxd units of 10^18 Mx/m^2
+        # IDL model behavior includes all and only ephemeral regions if
+        # cycle source strength relative to Sun is negative
+
+        # fast forward stuff from old model
+        # only emerge active regions
+        if self._mode_ar and not self._mode_eph:
+            ind_big = np.nonzero(flux > (3 * self._avefluxd / self._binflux))[0]
+            if len(ind_big) == 0:
+                return np.empty(0)
+            flux = flux[ind_big]
+
+        # old test mode for negative cycle mult which should be a flag; alas
+        # only emerge ephemeral regions
+        if not self._mode_ar and self._mode_eph:
+            ind_small = np.nonzero(flux < (3 * self._avefluxd / self._binflux))[0]
+            if len(ind_small) == 0:
+                return np.empty(0)
+            flux = flux[ind_small]
+
         return flux
 
-    def sample_phi(self, ntotal: int) -> np.ndarray:
-        phi = self._rng.uniform(high=2*np.pi, size=ntotal)
+
+
+    def sample_phi(self,
+                   flux: np.ndarray,
+                   ntotal: int) -> np.ndarray:
+        phi = rng.uniform(high=2*np.pi, size=ntotal)
         return phi
 
-    def sample_theta(self, latsource: float, flux: np.ndarray, ntotal: int) -> np.ndarray:
-        rng = self._rng
+
+
+    def sample_theta(self,
+                     flux: np.ndarray,
+                     latsource: float,
+                     ntotal: int) -> np.ndarray:
 
         theta = latsource * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
         width = self._lat_width * (np.exp(-flux * self._binflux / self._lat_fold) + 0.15)
@@ -119,9 +193,16 @@ class BipoleRegion(Component):
         theta = (np.pi / 2 - theta) % np.pi
         return theta
 
-    def sample_tilt(self, source: float, theta: np.ndarray, flux: np.ndarray, ntotal) -> np.ndarray:
+
+
+    def sample_orientation(self,
+                           phi: np.ndarray,
+                           theta: np.ndarray,
+                           flux: np.ndarray,
+                           source: float,
+                           ntotal: int) -> np.ndarray:
         width = self._joy_width * np.exp(-self._binflux * flux / self._joy_fold) + self._sjzero
-        orient = self._rng.normal(loc=self._joy, scale=width, size=ntotal) * np.pi / 180
+        orient = rng.normal(loc=self._joy, scale=width, size=ntotal) * np.pi / 180
         # flip sign for opposite polarity regions in different hemispheres (Hale's Law)
         hemi = np.sign(np.pi / 2 - theta)
         orient = np.pi * (1 - hemi) / 2 + hemi * orient
@@ -129,9 +210,13 @@ class BipoleRegion(Component):
         orient += np.pi * (source < 0)
         return orient
 
-    def make_concentrations(self, phi, theta, flux, orient):
-        rng = self._rng
 
+
+    def make_concentrations(self,
+                            phi: np.ndarray,
+                            theta: np.ndarray,
+                            flux: np.ndarray,
+                            orient: np.ndarray):
         r = (np.sqrt(flux * self._binflux * 1e18 / self._avefluxd / np.pi) + 7e8) / 7e10
         # impose minimum separation of ~0.5 supergranulation of 18Mm
         sep = np.clip(r, a_min=9000 / self._rad / 2, a_max=None)
@@ -222,4 +307,3 @@ class BipoleRegion(Component):
         aflux = np.astype(aflux, np.int64)
 
         return aphi, atheta, aflux
-

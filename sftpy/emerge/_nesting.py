@@ -1,6 +1,8 @@
 import cv2 as cv
 import numpy as np
 
+from sftpy import rng
+
 from ..component import Component
 from ..viz import plot_syn
 
@@ -15,7 +17,6 @@ class PlageNests(Component):
                  avefluxd: float,
                  thr: float,
                  nest_lat_lim: float,
-                 rng: np.random.Generator,
                  loglvl: int=0):
         super().__init__(loglvl)
 
@@ -25,7 +26,6 @@ class PlageNests(Component):
         self._avefluxd = avefluxd
         self._thr = thr
         self._nest_lat_lim = nest_lat_lim
-        self._rng = rng
 
     def identify_plages(self,
                         phi: np.ndarray,
@@ -92,7 +92,7 @@ class PlageNests(Component):
         nactive = len(is_active)
         if nactive > 0:
             # pick nest regions from set of sufficiently large regions
-            will_nest = self._rng.uniform(size=nactive) < 0.4
+            will_nest = rng.uniform(size=nactive) < 0.4
             nnest = np.sum(will_nest)
 
             self.log(3, f"NEST nactive = {nactive}")
@@ -122,7 +122,7 @@ class PlageNests(Component):
                 if nplage > 0:
                     nreplace = min(nnest, nplage)
                     self.log(3, f"NEST nreplace = {nreplace}")
-                    point = self._rng.choice(is_plage_px, replace=False, size=nreplace)
+                    point = rng.choice(is_plage_px, replace=False, size=nreplace)
                     point = np.astype(point, np.int64)
                     lat = point // self._phibins
 

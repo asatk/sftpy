@@ -14,6 +14,8 @@ from sftpy.cycle import CYC1, ConvergePolarCaps
 from sftpy.decay import Decay
 from sftpy.dflow import DF2
 from sftpy.emerge import BMRSchrijver
+from sftpy.emerge.regions import BipoleRegion, MagneticRegion
+from sftpy.emerge import PlageNests
 from sftpy.fragment import Fragment
 from sftpy.initialize import InitTwo
 from sftpy.mflow import MF2
@@ -23,7 +25,7 @@ from sftpy.rwalk import RW0, RW2
 from sftpy.misc import WrapPhi, WrapTheta
 from sftpy.util import Logger, Timestep, MapSaver
 from sftpy.util.logger import TimedLogger
-from sftpy.viz import plot_syn, plot_aflux, anim_map_with_flux
+from sftpy.viz import plot_aflux, anim_map_with_flux
 
 
 
@@ -46,6 +48,31 @@ def loop():
     thetabins = rc["synoptic.thetabins"]
 
     as_specified = rc["schrijver.as_specified"]
+
+    # bipole orientation
+    joy = rc["schrijver.joy"]
+    joy_width = rc["schrijver.joy_width"]
+    joy_fold = rc["schrijver.joy_fold"]
+    sjzero = rc["schrijver.sjzero"]
+    max_lat = rc["schrijver.max_lat"]
+    lat_width = rc["schrijver.lat_width"]
+    lat_fold = rc["schrijver.lat_fold"]
+    turbulent = rc["schrijver.turbulent"]
+    psource = rc["schrijver.psource"]
+    avefluxd = rc["schrijver.avefluxd"]
+    miniflux = rc["schrijver.miniflux"]
+    maxflux = rc["schrijver.maxflux"]
+
+    thr = rc["rwalk.thr"]
+
+    rad = rc["physics.rad"]
+
+    thetabins = rc["synoptic.thetabins"]
+    phibins = rc["synoptic.phibins"]
+
+    nest_lat_lim = 50.0
+
+    binflux = rc["physics.binflux"]
 
 
     nstepsfullres = nstep - 1
@@ -75,6 +102,36 @@ def loop():
     rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
     ini = InitTwo(nfluxmax)
 
+    bipole = BipoleRegion(
+        p=psource,
+        minflux=miniflux,
+        maxflux=maxflux,
+        avefluxd=avefluxd,
+        dt=dt,
+        turbulent=turbulent,
+        lat_width=lat_width,
+        lat_fold=lat_fold,
+        joy=joy,
+        joy_width=joy_width,
+        joy_fold=joy_fold,
+        sjzero=sjzero,
+        rad=rad,
+        binflux=binflux,
+        mode_ar=True,
+        mode_eph=False,
+        loglvl=1
+    )
+
+    plagenests = PlageNests(
+        phibins=phibins,
+        thetabins=thetabins,
+        binflux=binflux,
+        avefluxd=avefluxd,
+        thr=thr,
+        nest_lat_lim=nest_lat_lim,
+        loglvl=1,
+    )
+
     decay = Decay()
     rwalk = RW2(dt)
     mflow = MF2(dt/2)
@@ -82,12 +139,12 @@ def loop():
     dflow2 = DF2(dt/2)
     collide = COL2(loglvl=0)
     fragment = Fragment(rwalk_frag)
-    bmr = BMRSchrijver(cycle=cycle, dt=dt,
-                       nfluxmax=nfluxmax, as_specified=as_specified, loglvl=0)
+    bmr = BMRSchrijver(cycle=cycle, region=bipole, nest=plagenests, dt=dt,
+                       nfluxmax=nfluxmax, loglvl=0)
 
     # initialize simulation
     phi, theta, flux, nflux = ini.init()
-    saver.checkpoint(phi, theta, np.abs(flux), nflux)
+    saver.checkpoint(phi, theta, flux, nflux)
 
     timed_logger.clock_start("sim", "Simulation begins:")
     for i in range(1, nstep + 1):
@@ -95,10 +152,10 @@ def loop():
         timed_logger.log(loglvl, f"[{i-1}] t = {time/86400/365:.03g} yr")
         timed_logger.clock_start("iter")
 
-        if ((nstep - (i - 1)) < nstepsfullres) and not bmr.as_specified:
+        if ((nstep - (i - 1)) < nstepsfullres) and bipole.mode_ar:
             correction = correction / ff
             dt = dt / ff
-            bmr.as_specified = True
+            bipole.mode_eph = True
 
         # polar converge -- remove half of all concentrations after half cycle
         # nflux = polarconv.converge(phi, theta, flux, nflux)
@@ -126,7 +183,7 @@ def loop():
         timed_logger.clock_check("sim", "Simulation elapsed time: ")
 
         time.step()
-        saver.checkpoint(phi, theta, np.abs(flux), nflux)
+        saver.checkpoint(phi, theta, flux, nflux)
 
     '''
         # arinflow

@@ -3,15 +3,15 @@ Emerge components describe the creation of spots in correspondence with
 stellar activity levels.
 """
 
-from ._bmr import BipoleRegion
+from . import regions
 from ._nesting import PlageNests
 
-from .bmr import BMREmerge
-from .bmr import BMRSchrijver
+from .emerge import BMREmerge
+from .emerge import BMRSchrijver
 
 
 __all__ = [
-    "BipoleRegion",
+    "regions",
     "PlageNests",
     "BMREmerge",
     "BMRSchrijver"
