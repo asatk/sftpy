@@ -1,52 +1,145 @@
 import cv2 as cv
 import numpy as np
 
-def identify_nesting_plages(phi: np.ndarray,
-                            theta: np.ndarray,
-                            flux: np.ndarray,
-                            nflux: int,
-                            thr: float,
-                            binflux: float,
-                            phibins: int,
-                            thetabins: int,
-                            nest_lat_lim: float):
+from ..component import Component
+from ..viz import plot_syn
 
-    # 2D histogram of unsigned flux in a sine latitude vs. longitude grid
-    aflux = np.abs(flux[:nflux])
-    costheta = np.cos(theta[:nflux])
-    map, phi_edges, theta_edges = np.histogram2d(
-        phi[:nflux], costheta, weights=aflux,
-        bins=(phibins, thetabins),
-        range=((0, 2 * np.pi), (-1., 1.)))
+class PlageNests(Component):
 
-    # threshold flux to include locations of plages -- binary map
-    synoptic_thr = np.astype(map > (thr / (binflux / 1.4752)), np.float64)
+    prefix = "[plage-nest]"
 
-    # TODO IDL -- compare smooth+dilation ops
-    # looks good from debug plots in BMRSchrijver
+    def __init__(self,
+                 phibins: int,
+                 thetabins: int,
+                 binflux: float,
+                 avefluxd: float,
+                 thr: float,
+                 nest_lat_lim: float,
+                 rng: np.random.Generator,
+                 loglvl: int=0):
+        super().__init__(loglvl)
 
-    # smooth slightly and require at least 6 neighbors to be part of plage
-    kernel = np.ones((3, 3), dtype=np.float64)
-    synoptic_sm = cv.filter2D(synoptic_thr, -1, kernel / 9)
+        self._phibins = phibins
+        self._thetabins = thetabins
+        self._binflux = binflux
+        self._avefluxd = avefluxd
+        self._thr = thr
+        self._nest_lat_lim = nest_lat_lim
+        self._rng = rng
 
-    # dilate to add an extra ring of pixels to plage
-    synoptic_thr2 = np.asarray(synoptic_sm > 5.9 / 9, dtype=np.uint8)
-    synoptic_dil = cv.dilate(synoptic_thr2, kernel)
+    def identify_plages(self,
+                        phi: np.ndarray,
+                        theta: np.ndarray,
+                        flux: np.ndarray,
+                        nflux: int):
 
-    # nesting latitude limit in pixels of a sine latitude grid
-    sinlat_lim_px = np.int64((1 - np.sin(nest_lat_lim * np.pi / 180)) * thetabins / 2)
+        # 2D histogram of unsigned flux in a sine latitude vs. longitude grid
+        aflux = np.abs(flux[:nflux])
+        costheta = np.cos(theta[:nflux])
+        flux_hist, _, _ = np.histogram2d(
+            phi[:nflux], costheta, weights=aflux,
+            bins=(self._phibins, self._thetabins),
+            range=((0, 2 * np.pi), (-1., 1.)))
 
-    # Sin latitude in pixels
-    xx = np.zeros(thetabins, dtype=np.byte)
-    xx[sinlat_lim_px:-sinlat_lim_px] = 1
+        # threshold flux to include locations of plages -- binary map
+        synoptic_thr = np.astype(flux_hist > (self._thr / (self._binflux / 1.4752)), np.float64)
 
-    # Longitude in pixels
-    yy = np.ones(phibins, dtype=np.byte)
+        # TODO IDL -- compare smooth+dilation ops
+        # looks good from debug plots in BMRSchrijver
 
-    # Limit nesting w/in existing pages to latitudes btwn +/- nest_lat_lim
-    mask = np.outer(yy, xx)
+        # smooth slightly and require at least 6 neighbors to be part of plage
+        kernel = np.ones((3, 3), dtype=np.float64)
+        synoptic_sm = cv.filter2D(synoptic_thr, -1, kernel / 9)
 
-    # Identifies pixels with plages available for nesting (2D map)
-    is_plage = synoptic_dil * mask
+        # dilate to add an extra ring of pixels to plage
+        synoptic_thr2 = np.asarray(synoptic_sm > 5.9 / 9, dtype=np.uint8)
+        synoptic_dil = cv.dilate(synoptic_thr2, kernel)
 
-    return is_plage
+        # nesting latitude limit in pixels of a sine latitude grid
+        sinlat_lim_px = np.int64((1 - np.sin(self._nest_lat_lim * np.pi / 180)) * self._thetabins / 2)
+
+        # Sin latitude in pixels
+        xx = np.zeros(self._thetabins, dtype=np.byte)
+        xx[sinlat_lim_px:-sinlat_lim_px] = 1
+
+        # Longitude in pixels
+        yy = np.ones(self._phibins, dtype=np.byte)
+
+        # Limit nesting w/in existing pages to latitudes btwn +/- nest_lat_lim
+        mask = np.outer(yy, xx)
+
+        # Identifies pixels with plages available for nesting (2D map)
+        is_plage = synoptic_dil * mask
+
+        return is_plage
+
+
+
+    def place_active_regions(self,
+                             phi: np.ndarray,
+                             theta: np.ndarray,
+                             flux: np.ndarray,
+                             nflux: int,
+                             newphi: np.ndarray,
+                             newtheta: np.ndarray,
+                             newflux: np.ndarray):
+        # nesting
+        # ~40% of activate regions emerge inside existing regions.
+        # applied to all regions larger than 2.5 sq deg (factor 2 for 2 pol)
+        # 1.4752 is flux to G
+        active_thr = 2.5 * self._avefluxd * 1.47562 / 2 / self._binflux
+        is_active = np.nonzero(newflux >= active_thr)[0]
+        nactive = len(is_active)
+        if nactive > 0:
+            # pick nest regions from set of sufficiently large regions
+            will_nest = self._rng.uniform(size=nactive) < 0.4
+            nnest = np.sum(will_nest)
+
+            self.log(3, f"NEST nactive = {nactive}")
+
+            # pick new location inside plage regions but not at polar caps
+            # limits emergence to lat +/- deg
+            if nnest > 0:
+                is_nesting = is_active[will_nest]
+                self.log(3, f"NEST nnest = {nnest}")
+
+                # NOTE: nesting plages identified in IDL model much earlier
+                # than immediately after sampling new spots. before flows,
+                # fragmentation, and collisions.
+
+                is_plage = self.identify_plages(phi, theta, flux, nflux)
+                is_plage_px = np.nonzero(np.ravel(is_plage))[0]
+                nplage = len(is_plage_px)
+
+                if self._loglvl >= 3:
+                    plot_syn(phi, theta, flux, nflux, show=True)
+
+                self.plot(3, "imshow", is_plage.T)
+                self.pshow(3)
+
+                self.log(3, f"NEST nplage = {nplage}")
+
+                if nplage > 0:
+                    nreplace = min(nnest, nplage)
+                    self.log(3, f"NEST nreplace = {nreplace}")
+                    point = self._rng.choice(is_plage_px, replace=False, size=nreplace)
+                    point = np.astype(point, np.int64)
+                    lat = point // self._phibins
+
+                    # TODO check the  +1 on these
+                    nest_newphi = point - self._phibins * lat
+                    nest_newtheta = np.pi / 2 - np.arcsin(lat / (self._thetabins / 2) - 1)
+                    newphi[is_nesting[:nreplace]] = nest_newphi
+                    newtheta[is_nesting[:nreplace]] = nest_newtheta
+
+                    self.log(3, f"NEST point: {point}")
+                    self.log(3, f"NEST lat: {lat}")
+                    self.log(3, f"NEST newphi: {nest_newphi}")
+                    self.log(3, f"NEST newlat: {nest_newtheta}")
+
+                else:
+                    self.log(3, "NEST no plage regions")
+            else:
+                self.log(3, "NEST no nesting regions")
+        else:
+            self.log(3, "NEST no new active regions")

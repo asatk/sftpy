@@ -14,7 +14,8 @@ from sftpy import rng
 from ..component import Component
 from ..cycle import Cycle
 from ..util import powerlaw_rv, schrijver_rv
-from ._nesting import identify_nesting_plages
+from ._nesting import PlageNests
+from ._bmr import BipoleRegion
 
 as_specified = rc["schrijver.as_specified"]
 
@@ -47,6 +48,37 @@ rad = rc["physics.rad"]
 thetabins = rc["synoptic.thetabins"]
 phibins = rc["synoptic.phibins"]
 
+nest_lat_lim = 50.0
+
+bipole = BipoleRegion(
+    p=psource,
+    minflux=miniflux,
+    maxflux=maxflux,
+    avefluxd=avefluxd,
+    dt=dt,
+    turbulent=turbulent,
+    lat_width=lat_width,
+    lat_fold=lat_fold,
+    joy=joy,
+    joy_width=joy_width,
+    joy_fold=joy_fold,
+    sjzero=sjzero,
+    rad=rad,
+    binflux=binflux,
+    rng=rng,
+    loglvl=1
+)
+
+plagenests = PlageNests(
+    phibins=phibins,
+    thetabins=thetabins,
+    binflux=binflux,
+    avefluxd=avefluxd,
+    thr=thr,
+    nest_lat_lim=nest_lat_lim,
+    rng=rng,
+    loglvl=1,
+)
 
 
 class BMREmerge(Component, metaclass=abc.ABCMeta):
@@ -190,54 +222,54 @@ class BMRSchrijver(BMREmerge):
 
             # Step 1 --- determine size distribution
 
-            ## [1] High-flux tail dominant for large regions
-            a = 8.0 * np.abs(source[i])
-            p = psource
-            pm1 = p - 1
-
-
-            minflux = miniflux / binflux
-            scale = (1.5 * avefluxd) ** pm1 / -pm1
-            rangefactor = maxflux ** -pm1 - miniflux ** -pm1
-            ntotal1 = 2 * a * dt / 86400 * scale * rangefactor
-
-            frac = ntotal1 - int(ntotal1)
-            ntotal1 = int(ntotal1) + (rng.uniform() < frac)
-
-            # rv1 = powerlaw_rv(ntotal1, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
-            rv1 = schrijver_rv(ntotal1, p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
-            newflux1 = np.astype(rv1, np.int64)
-
-
-            ## [2] Low-flux tail dominated by ephemeral regions
-            a = 8.0
-            a *= np.abs(source[i])**(1/3) * turbulent + (1 - turbulent)
-            p = psource + 1
-            pm1 = p - 1
-            scale = (1.5 * avefluxd) ** pm1 / -pm1
-            rangefactor = maxflux ** -pm1 - miniflux ** -pm1
-            ntotal2 = 2 * a * dt / 86400 * scale * rangefactor
-
-            frac = ntotal2 - int(ntotal2)
-            ntotal2 = int(ntotal2) + (rng.uniform() < frac)
-
-            # rv2 = powerlaw_rv(ntotal2, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
-            rv2 = schrijver_rv(ntotal2, p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
-            newflux2 = np.astype(rv2, np.int64)
-
-            newflux = np.r_[newflux1, newflux2]
+            # ## [1] High-flux tail dominant for large regions
+            # a = 8.0 * np.abs(source[i])
+            # p = psource
+            # pm1 = p - 1
+            #
+            #
+            # minflux = miniflux / binflux
+            # scale = (1.5 * avefluxd) ** pm1 / -pm1
+            # rangefactor = maxflux ** -pm1 - miniflux ** -pm1
+            # ntotal1 = 2 * a * dt / 86400 * scale * rangefactor
+            #
+            # frac = ntotal1 - int(ntotal1)
+            # ntotal1 = int(ntotal1) + (rng.uniform() < frac)
+            #
+            # # rv1 = powerlaw_rv(ntotal1, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            # rv1 = schrijver_rv(ntotal1, p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            # newflux1 = np.astype(rv1, np.int64)
+            #
+            #
+            # ## [2] Low-flux tail dominated by ephemeral regions
+            # a = 8.0
+            # a *= np.abs(source[i])**(1/3) * turbulent + (1 - turbulent)
+            # p = psource + 1
+            # pm1 = p - 1
+            # scale = (1.5 * avefluxd) ** pm1 / -pm1
+            # rangefactor = maxflux ** -pm1 - miniflux ** -pm1
+            # ntotal2 = 2 * a * dt / 86400 * scale * rangefactor
+            #
+            # frac = ntotal2 - int(ntotal2)
+            # ntotal2 = int(ntotal2) + (rng.uniform() < frac)
+            #
+            # # rv2 = powerlaw_rv(ntotal2, -p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            # rv2 = schrijver_rv(ntotal2, p, minflux / 2 / binflux, maxflux / 2 / binflux, rng)
+            # newflux2 = np.astype(rv2, np.int64)
+            #
+            # newflux = np.r_[newflux1, newflux2]
+            self.log(1, f"Cycle ({i}) strength: {source[i]:.05f}")
+            newflux = bipole.sample_flux(source[i])
             ntotal = len(newflux)
+
+
 
             # accelerated time mode -- include only regions larger than 2sq deg
             # or 2 * 1.5e18 & avefluxd = 3 avefluxd units of 10^18 Mx/m^2
             # IDL model behavior includes all and only ephemeral regions if
             # cycle source strength relative to Sun is negative
 
-            self.log(1, f"Cycle ({i}) strength: {source[i]:.05f}")
-            self.log(1,
-                     f"Active = {ntotal1}\t" + \
-                     f"Ephemeral = {ntotal2}\t" + \
-                     "All = {ntotal}")
+
 
             # fast forward stuff from old model
             # only emerge active regions
@@ -262,170 +294,187 @@ class BMRSchrijver(BMREmerge):
                 continue
 
             # Step 2 --- determine positions
-            newphi = rng.uniform(high=2*np.pi, size=ntotal)
-            newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
-            width = lat_width * (np.exp(-newflux * binflux / lat_fold) + 0.15)
-            newtheta += rng.normal(scale=width*np.pi/180, size=ntotal)
-            # TODO introduced this myself just to prevent stuff from going oob
-            # newtheta = np.clip(newtheta, a_min=-np.pi/2, a_max=np.pi/2)
-            # latitude -> co-latitude
-            newtheta = (np.pi/2 - newtheta) % np.pi
+            # newphi = rng.uniform(high=2*np.pi, size=ntotal)
+            # newtheta = latsource[i] * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
+            # width = lat_width * (np.exp(-newflux * binflux / lat_fold) + 0.15)
+            # newtheta += rng.normal(scale=width*np.pi/180, size=ntotal)
+            # # TODO introduced this myself just to prevent stuff from going oob
+            # # newtheta = np.clip(newtheta, a_min=-np.pi/2, a_max=np.pi/2)
+            # # latitude -> co-latitude
+            # newtheta = (np.pi/2 - newtheta) % np.pi
+            newphi = bipole.sample_phi(ntotal)
+            newtheta = bipole.sample_theta(latsource[i], newflux, ntotal)
 
             # nesting
             # ~40% of activate regions emerge inside existing regions.
             # applied to all regions larger than 2.5 sq deg (factor 2 for 2 pol)
             # 1.4752 is flux to G
-            active_thr = 2.5 * avefluxd * 1.47562 / 2 / binflux
-            is_active = np.nonzero(newflux >= active_thr)[0]
-            nactive = len(is_active)
-            if nactive > 0:
-                # pick nest regions from set of sufficiently large regions
-                will_nest = rng.uniform(size=nactive) < 0.4
-                nnest = np.sum(will_nest)
-
-                self.log(3, f"NEST nactive = {nactive}")
-
-                # pick new location inside plage regions but not at polar caps
-                # limits emergence to lat +/- deg
-                if nnest > 0:
-                    is_nesting = is_active[will_nest]
-                    self.log(3, f"NEST nnest = {nnest}")
-
-                    # NOTE: nesting plages identified in IDL model much earlier
-                    # than immediately after sampling new spots. before flows,
-                    # fragmentation, and collisions.
-
-                    nest_lat_lim = 50.0
-                    is_plage = identify_nesting_plages(
-                        phi, theta, flux, nflux, thr, binflux,
-                        phibins, thetabins, nest_lat_lim)
-                    is_plage_px = np.nonzero(np.ravel(is_plage))[0]
-                    nplage = len(is_plage_px)
-
-                    if self._loglvl >= 3:
-                        plot_syn(phi, theta, flux, nflux, show=True)
-
-                    self.plot(3, "imshow", is_plage.T)
-                    self.pshow(3)
-
-                    self.log(3, f"NEST nplage = {nplage}")
-
-                    if nplage > 0:
-                        nreplace = min(nnest, nplage)
-                        self.log(3, f"NEST nreplace = {nreplace}")
-                        point = rng.choice(is_plage_px, replace=False, size=nreplace)
-                        point = np.astype(point, np.int64)
-                        lat = point // phibins
-
-                        # TODO check the  +1 on these
-                        nest_newphi = point - phibins * lat
-                        nest_newtheta = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
-                        newphi[is_nesting[:nreplace]] = nest_newphi
-                        newtheta[is_nesting[:nreplace]] = nest_newtheta
-
-                        self.log(3, f"NEST point: {point}")
-                        self.log(3, f"NEST lat: {lat}")
-                        self.log(3, f"NEST newphi: {nest_newphi}")
-                        self.log(3, f"NEST newlat: {nest_newtheta}")
-
-                    else:
-                        self.log(3, "NEST no plage regions")
-                else:
-                    self.log(3, "NEST no nesting regions")
-            else:
-                self.log(3, "NEST no new active regions")
-
-            # Step 3 --- orientation of bipole axes
-            width = joy_width * np.exp(-binflux * newflux / joy_fold) + sjzero
-            orient = rng.normal(loc=joy, scale=width, size=ntotal) * np.pi / 180
-            # flip sign for opposite polarity regions in different hemispheres (Hale's Law)
-            hemi = np.sign(np.pi / 2 - newtheta)
-            orient = np.pi * (1 - hemi) / 2 + hemi * orient
-            # invert polarity based on phase of cycle
-            orient += np.pi * (source[i] < 0)
+            # active_thr = 2.5 * avefluxd * 1.47562 / 2 / binflux
+            # is_active = np.nonzero(newflux >= active_thr)[0]
+            # nactive = len(is_active)
+            # if nactive > 0:
+            #     # pick nest regions from set of sufficiently large regions
+            #     will_nest = rng.uniform(size=nactive) < 0.4
+            #     nnest = np.sum(will_nest)
+            #
+            #     self.log(3, f"NEST nactive = {nactive}")
+            #
+            #     # pick new location inside plage regions but not at polar caps
+            #     # limits emergence to lat +/- deg
+            #     if nnest > 0:
+            #         is_nesting = is_active[will_nest]
+            #         self.log(3, f"NEST nnest = {nnest}")
+            #
+            #         # NOTE: nesting plages identified in IDL model much earlier
+            #         # than immediately after sampling new spots. before flows,
+            #         # fragmentation, and collisions.
+            #
+            #         nest_lat_lim = 50.0
+            #         is_plage = identify_nesting_plages(
+            #             phi, theta, flux, nflux, thr, binflux,
+            #             phibins, thetabins, nest_lat_lim)
+            #         is_plage_px = np.nonzero(np.ravel(is_plage))[0]
+            #         nplage = len(is_plage_px)
+            #
+            #         if self._loglvl >= 3:
+            #             plot_syn(phi, theta, flux, nflux, show=True)
+            #
+            #         self.plot(3, "imshow", is_plage.T)
+            #         self.pshow(3)
+            #
+            #         self.log(3, f"NEST nplage = {nplage}")
+            #
+            #         if nplage > 0:
+                #             nreplace = min(nnest, nplage)
+            #             self.log(3, f"NEST nreplace = {nreplace}")
+            #             point = rng.choice(is_plage_px, replace=False, size=nreplace)
+            #             point = np.astype(point, np.int64)
+            #             lat = point // phibins
+            #
+            #             # TODO check the  +1 on these
+            #             nest_newphi = point - phibins * lat
+            #             nest_newtheta = np.pi / 2 - np.arcsin(lat / (thetabins / 2) - 1)
+            #             newphi[is_nesting[:nreplace]] = nest_newphi
+            #             newtheta[is_nesting[:nreplace]] = nest_newtheta
+            #
+            #             self.log(3, f"NEST point: {point}")
+            #             self.log(3, f"NEST lat: {lat}")
+            #             self.log(3, f"NEST newphi: {nest_newphi}")
+            #             self.log(3, f"NEST newlat: {nest_newtheta}")
+            #
+            #         else:
+            #             self.log(3, "NEST no plage regions")
+            #     else:
+            #         self.log(3, "NEST no nesting regions")
+            # else:
+            #     self.log(3, "NEST no new active regions")
+            plagenests.place_active_regions(
+                phi, theta, flux, nflux, newphi, newtheta, newflux)
 
 
+            # # Step 3 --- orientation of bipole axes
+            # width = joy_width * np.exp(-binflux * newflux / joy_fold) + sjzero
+            # orient = rng.normal(loc=joy, scale=width, size=ntotal) * np.pi / 180
+            # # flip sign for opposite polarity regions in different hemispheres (Hale's Law)
+            # hemi = np.sign(np.pi / 2 - newtheta)
+            # orient = np.pi * (1 - hemi) / 2 + hemi * orient
+            # # invert polarity based on phase of cycle
+            # orient += np.pi * (source[i] < 0)
+            orient = bipole.sample_tilt(source[i], newtheta, newflux, ntotal)
+
+            self.log(1, f"newflux = {np.sum(2 * newflux)}")
 
             # Step 4 --- position concentrations
-            r = (np.sqrt(newflux * binflux * 1e18 / avefluxd / np.pi) + 7e8) / 7e10
-            # impose minimum separation of ~0.5 supergranulation of 18Mm
-            sep = np.clip(r, a_min=9000/rad/2, a_max=None)
-            # number of new concentrations that contain 15e18 Mx w/ at least
-            # three equal concentrations per polarity
-            percon = np.clip(newflux / 3., a_min=1, a_max=None)
-            percon[percon > (15. / binflux)] = 15. / binflux
-
-            # bulk = np.clip(newflux // percon, a_min=1, a_max=None)
-            bulk = np.clip(np.astype(
-                newflux / percon, np.int64),
-                a_min=1, a_max=None)
-            rest = np.clip(newflux - percon * bulk, a_min=0, a_max=None)
-
-            nadd = bulk + (rest > 0)
-            nadd[newflux < bulk * percon] = 1
-            ind_rest = np.cumsum(nadd) - 1
-
-            r_nadd = np.repeat(r, nadd)
-            sep_nadd = np.repeat(sep, nadd)
-            percon_nadd = np.repeat(percon, nadd)
-            percon_nadd[ind_rest] = rest
-            nadd_tot = ind_rest[-1] + 1
-
-            # one polarity
-            offset1 = rng.uniform(high=r_nadd)
-            angle1 = rng.uniform(high=2*np.pi, size=nadd_tot)
-
-            # opposite polarity
-            offset2 = rng.uniform(high=r_nadd)
-            angle2 = rng.uniform(high=2*np.pi, size=nadd_tot)
-
-            x_tmp = np.r_[ sep_nadd + offset1 * np.cos(angle1),
-                          -sep_nadd + offset2 * np.cos(angle2)]
-            y_tmp = np.r_[offset1 * np.sin(angle1),
-                          offset2 * np.sin(angle2)]
-
-            # orientation of bipolar spot
-            #TODO better way to double these?
-            orient_nadd_half = np.repeat(orient, nadd)
-            orient_nadd = np.r_[orient_nadd_half, orient_nadd_half]
-
-            orient_tmp = orient_nadd + np.pi / 2
-            coso = np.cos(orient_tmp)
-            sino = np.sin(orient_tmp)
-            xo = coso * x_tmp + sino * y_tmp
-            yo = -sino * x_tmp + coso * y_tmp
-
-            # location of bipolar active region / concentration
-            newphi_nadd_half = np.repeat(newphi, nadd)
-            newphi_nadd = np.r_[newphi_nadd_half, newphi_nadd_half]
-            newtheta_nadd_half = np.repeat(newtheta, nadd)
-            newtheta_nadd = np.r_[newtheta_nadd_half, newtheta_nadd_half]
-
-            cosphi = np.cos(newphi_nadd)
-            sinphi = np.sin(newphi_nadd)
-            costheta = np.cos(newtheta_nadd)
-            sintheta = np.sin(newtheta_nadd)
-
-            # Cartesian coordinates of spots
-            x = cosphi * sintheta + xo * cosphi * costheta - yo * sinphi
-            y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
-            z = costheta - xo * sintheta
-
-            # spherical coordinates of spots
-            aphi = np.arctan2(y, x) % (2 * np.pi)
-            atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
-
-            # Poisson noise added to each concentration
-            scale_nadd = np.sqrt(percon_nadd)
-            noise = rng.normal(scale=scale_nadd)
-
-            # add both polarities of spots
-            aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
-
-            # IDL code has remainder concentration w/o noise...
-            aflux[ind_rest] = aflux[ind_rest] - noise[ind_rest]
-            aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[ind_rest]
-            aflux = np.astype(aflux, np.int64)
+            # r = (np.sqrt(newflux * binflux * 1e18 / avefluxd / np.pi) + 7e8) / 7e10
+            # # impose minimum separation of ~0.5 supergranulation of 18Mm
+            # sep = np.clip(r, a_min=9000/rad/2, a_max=None)
+            # # number of new concentrations that contain 15e18 Mx w/ at least
+            # # three equal concentrations per polarity
+            # percon = np.clip(newflux / 3., a_min=1, a_max=None).astype(int)
+            # percon[percon > (15. / binflux)] = 15. / binflux
+            #
+            # self.log(1, f"percon = {np.sum(percon)}")
+            #
+            # # bulk = np.clip(newflux // percon, a_min=1, a_max=None)
+            # bulk = np.clip(np.astype(
+            #     newflux / percon, np.int64),
+            #     a_min=1, a_max=None)
+            #
+            # self.log(1, f"bulk = {np.mean(bulk)}")
+            #
+            # rest = np.clip(newflux - percon * bulk, a_min=0, a_max=None)
+            #
+            # # self.log(1, f"rest = {np.sum(rest)}")
+            # self.log(1, f"rest = {np.count_nonzero(rest)}")
+            #
+            # nadd = bulk + (rest > 0)
+            # nadd[newflux < bulk * percon] = 1
+            # ind_rest = np.cumsum(nadd) - 1
+            #
+            # r_nadd = np.repeat(r, nadd)
+            # sep_nadd = np.repeat(sep, nadd)
+            # percon_nadd = np.repeat(percon, nadd)
+            # percon_nadd[ind_rest] = rest
+            # nadd_tot = ind_rest[-1] + 1
+            #
+            # # one polarity
+            # offset1 = rng.uniform(high=r_nadd)
+            # angle1 = rng.uniform(high=2*np.pi, size=nadd_tot)
+            #
+            # # opposite polarity
+            # offset2 = rng.uniform(high=r_nadd)
+            # angle2 = rng.uniform(high=2*np.pi, size=nadd_tot)
+            #
+            # x_tmp = np.r_[ sep_nadd + offset1 * np.cos(angle1),
+            #               -sep_nadd + offset2 * np.cos(angle2)]
+            # y_tmp = np.r_[offset1 * np.sin(angle1),
+            #               offset2 * np.sin(angle2)]
+            #
+            # # orientation of bipolar spot
+            # #TODO better way to double these?
+            # orient_nadd_half = np.repeat(orient, nadd)
+            # orient_nadd = np.r_[orient_nadd_half, orient_nadd_half]
+            #
+            # orient_tmp = orient_nadd + np.pi / 2
+            # coso = np.cos(orient_tmp)
+            # sino = np.sin(orient_tmp)
+            # xo = coso * x_tmp + sino * y_tmp
+            # yo = -sino * x_tmp + coso * y_tmp
+            #
+            # # location of bipolar active region / concentration
+            # newphi_nadd_half = np.repeat(newphi, nadd)
+            # newphi_nadd = np.r_[newphi_nadd_half, newphi_nadd_half]
+            # newtheta_nadd_half = np.repeat(newtheta, nadd)
+            # newtheta_nadd = np.r_[newtheta_nadd_half, newtheta_nadd_half]
+            #
+            # cosphi = np.cos(newphi_nadd)
+            # sinphi = np.sin(newphi_nadd)
+            # costheta = np.cos(newtheta_nadd)
+            # sintheta = np.sin(newtheta_nadd)
+            #
+            # # Cartesian coordinates of spots
+            # x = cosphi * sintheta + xo * cosphi * costheta - yo * sinphi
+            # y = sinphi * sintheta + xo * sinphi * costheta + yo * cosphi
+            # z = costheta - xo * sintheta
+            #
+            # # spherical coordinates of spots
+            # aphi = np.arctan2(y, x) % (2 * np.pi)
+            # atheta = np.arccos(z / np.sqrt(x**2 + y**2 + z**2))
+            #
+            # # Poisson noise added to each concentration
+            # scale_nadd = np.sqrt(percon_nadd)
+            # noise = rng.normal(scale=scale_nadd)
+            #
+            # # add both polarities of spots
+            # aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
+            #
+            # # IDL code has remainder concentration w/o noise...
+            # aflux[ind_rest] = aflux[ind_rest] - noise[ind_rest]
+            # aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[ind_rest]
+            # aflux = np.astype(aflux, np.int64)
+            aphi, atheta, aflux = bipole.make_concentrations(
+                newphi, newtheta, newflux, orient)
+            nadd_tot = len(aphi) // 2
 
             # self.log(1, f"flux sum: {np.sum(np.abs(aflux)):.4e}")
             
@@ -492,6 +541,9 @@ class BMRSchrijver(BMREmerge):
                 flux = flux_cp
 
             # self.log(0, f"added nspots: {nadd_tot}")
+
+
+            self.log(1, f"aflux = {np.sum(np.abs(aflux))}")
 
             phi[nflux:nflux+2*nadd_tot] = aphi
             theta[nflux:nflux+2*nadd_tot] = atheta
