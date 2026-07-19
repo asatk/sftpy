@@ -48,7 +48,10 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
 
     ### <
 
-    neighbors_nz = flux != 0
+    # print(f"elements = {np.stack([phi, theta, flux], axis=1)}")
+    # print(f"{order = }")
+
+    # neighbors_nz = flux != 0
 
     sintheta = np.sin(theta)
     x = sintheta * np.cos(phi)
@@ -57,66 +60,101 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     l = (x, y, z)
     r = np.stack(l, axis=1)
 
+    # print(r)
+
     los = np.arange(0 - skips, nflux - skips, dtype=np.int64)
-    los = np.mod(los, nflux)
+    los = np.clip(los, a_min=0, a_max=nflux-1)
+    # los = np.mod(los, nflux)
+
     his = np.arange(skips, nflux + skips, dtype=np.int64)
-    his = np.mod(his, nflux)
+    his = np.clip(his, a_min=0, a_max=nflux-1)
+    # his = np.mod(his, nflux)
+
+    # print(f"{los = }")
+    # print(f"{his = }")
+
+
 
     # flux_lost = 0.0
 
     # calculate finding neighbors in parallel and coalesce sequentially?
     for i in order:
 
-        if not neighbors_nz[i]:
+        # print(f"--- {i = }")
+
+        # print(f"{neighbors_nz = })")
+
+        # flux of concentration must be non-zero
+        if not flux[i]:
             continue
+
+        # if not neighbors_nz[i]:
+        #     continue
 
         lo = los[i]
         thetalo = theta[i] - crphi
+        # print(f"{i = } {thetalo = :.3f}")
         while theta[lo] > thetalo:
+            # print(f"{lo = } {theta[lo] = :.3f}")
             lo = lo - skips
             if lo < 0:
                 thetalo += 2 * np.pi
                 lo += nflux
 
+        if lo > i:
+            lo -= nflux
+
         # his[lo] = i
 
         hi = his[i]
         thetahi = theta[i] + crphi
+        # print(f"{i = } {thetahi = :.3f}")
         while theta[hi] < thetahi:
+            # print(f"{hi = } {theta[hi] = :.3f}")
             hi = hi + skips
             if hi >= nflux:
                 thetahi -= 2 * np.pi
                 hi -= nflux
 
+        if hi < i:
+            hi += nflux
+
         # los[hi] = i
 
         lcrphi = crphi / sintheta[i]
 
-        if lo > hi:
-            neighbors_theta = np.arange(lo, hi + nflux + 1, dtype=np.int64)
-            neighbors_theta = np.mod(neighbors_theta, nflux)
-        else:
-            neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64)
+        # if lo > hi:
+        #     neighbors_theta = np.arange(lo, hi + nflux + 1, dtype=np.int64)
+        #     neighbors_theta = np.mod(neighbors_theta, nflux)
+        # else:
+
+        neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64) % nflux
 
         # make sure spots that are marked as empty never get looked at again
         # neighbors_theta_nz = neighbors_theta[neighbors_nz[neighbors_theta]]
         # hm accessing neighbors_nz in this way doubles comp time...
 
+        # print(f"{lo = } {hi = }")
+        # print(f"{neighbors_theta = }")
+
 
         phi_diff = phi[i] - phi[neighbors_theta]
         # phi_diff = phi[i] - phi[neighbors_theta_nz]
         phi_dist = np.abs(phi_diff)
+        # print(f"{phi_dist = }")
         is_near_phi = phi_dist < lcrphi
         neighbors_phi = neighbors_theta[is_near_phi]
         # neighbors_phi = neighbors_theta_nz[is_near_phi]
 
         r_diff = r[i] - r[neighbors_phi]
         r_dist = np.sum(np.square(r_diff), axis=1)
+        # print(f"{r_dist = }")
         is_near = r_dist < (crphi ** 2)
         # neighbors = neighbors_phi[is_near]
 
         neighbors_temp = neighbors_phi[is_near]
-        neighbors = neighbors_temp[flux[neighbors_temp] != 0]
+        neighbors = np.unique(neighbors_temp[flux[neighbors_temp] != 0])
+        # print(f"{neighbors = }")
 
         # cond = ~neighbors_nz & (flux != 0)
         # if np.any(cond):
@@ -150,11 +188,11 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
             # flux_lost += np.sum(np.abs(flux[neighbors])) - np.abs(flux_sum)
 
             flux[neighbors] = 0
-            neighbors_nz[neighbors] = False
+            # neighbors_nz[neighbors] = False
 
             if flux_sum != 0:
                 flux[nbr_coalesce] = flux_sum
-                neighbors_nz[nbr_coalesce] = True
+                # neighbors_nz[nbr_coalesce] = True
 
     # print(f"flux lost: {flux_lost}")
 
@@ -165,15 +203,120 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
         phi[:nnew] = phi[index]
         theta[:nnew] = theta[index]
         flux[:nnew] = flux[index]
-        flux[nnew:] = 0
+        # flux[nnew:] = 0
 
     phi_r = phi[:nnew]
     theta_r = theta[:nnew]
     flux_r = flux[:nnew]
 
+    # elements = np.stack([phi_r, theta_r, flux_r], axis=1)
+    # print(elements)
+
     l_ret = (phi_r, theta_r, flux_r)
 
     return l_ret
+
+
+# @nb.jit(cache=True)
+def collide_idl(phi, theta, flux, nflux, skips, crphi, order, seeds):
+
+    mlen = 10000
+    index = np.zeros(mlen, dtype=np.int64)
+
+    skips = 25
+
+    nlen = phi.shape[0]
+    x = np.zeros(nlen)
+    y = np.zeros(nlen)
+    z = np.zeros(nlen)
+
+    nflux1 = nflux - 1
+
+    index_sort = np.argsort(theta[:nflux])
+    theta[:nflux] = theta[index_sort]
+    phi[:nflux] = phi[index_sort]
+    flux[:nflux] = flux[index_sort]
+
+    for i in range(nflux):
+        sintheta = np.sin(theta[i])
+        x[i] = sintheta * np.cos(phi[i])
+        y[i] = sintheta * np.sin(phi[i])
+        z[i] = np.cos(theta[i])
+
+    for i in range(nflux - 2):
+        ipick = order[i]
+        if flux[ipick] == 0:
+            continue
+
+        thetamin = theta[ipick] - crphi
+        low = ipick - skips
+        if low < 0:
+            low = 0
+
+        while (theta[low] > thetamin) and (low > 0):
+            low = low - skips
+            if low < 0:
+                low = 0
+
+        thetaplus = theta[ipick] + crphi
+        hih = ipick + skips
+        if hih > nflux1:
+            hih = nflux1
+
+        while (theta[hih] < thetaplus) and (hih < nflux1):
+            hih = hih + skips
+            if hih > nflux1:
+                hih = nflux1
+
+        lcrphi = crphi / np.sin(theta[ipick])
+
+        k = 0
+        for j in range(low, hih):
+            d = phi[ipick] - phi[j]
+            if d < 0:
+                d = -d
+            if d < lcrphi:
+                # print(i, j, k, d, lcrphi)
+                index[k] = j
+                k += 1
+
+
+        nii = 0
+        for j in range(k):
+            ij = index[j]
+            d = (x[ipick] - x[ij])**2 + \
+                (y[ipick] - y[ij])**2 + \
+                (z[ipick] - z[ij])**2
+            if (d < crphi**2) and (flux[ij] != 0):
+                index[nii] = ij
+                nii += 1
+
+        # no neighbors
+        if nii == 0:
+            continue
+
+        np.random.seed(seeds[i])
+        ic = np.random.randint(nii)
+        ic = index[ic]
+
+        for j in range(nii):
+            if ic != index[j]:
+                ij = index[j]
+                flux[ic] = flux[ic] + flux[ij]
+                flux[ij] = 0
+
+    nfluxold = nflux
+    index = np.nonzero(flux[:nflux])[0]
+    # print(index)
+    nflux = len(index)
+    if nfluxold == nflux:
+        return nflux
+
+    phi[:nflux] = phi[index]
+    theta[:nflux] = theta[index]
+    flux[:nflux] = flux[index]
+
+    return nflux
 
 
 
@@ -347,12 +490,12 @@ class COL2(Collide):
         fluxtot_pre = np.sum(np.abs(flux[:nflux]))
 
         # number of indices that can be skipped must be no more than the total number of spots
-        skips = min(self._range, nflux)
+        skips = 1 if nflux <= self._range else self._range
         crphi = self._crphi
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
         seeds = rng.integers(low=2 ** 32 - 1, size=nflux, dtype=np.uint32)
 
-        # TODO is the copy necessary?
+        # # TODO is the copy necessary?
         phi_c = phi[:nflux].copy()
         theta_c = theta[:nflux].copy()
         flux_c = flux[:nflux].copy()
@@ -367,9 +510,19 @@ class COL2(Collide):
         theta[:nnew] = theta_r.copy()
         flux[:nnew] = flux_r.copy()
 
+        phi[nnew:] = 0.0
+        theta[nnew:] = 0.0
+        flux[nnew:] = 0
+
+        # nnew = collide_idl(phi, theta, flux, nflux, skips, crphi, order, seeds)
+
+
+
+
+
         fluxtot_post = np.sum(np.abs(flux[:nnew]))
 
-        # self.log(1, f"delta nflux: {nnew-nflux:6d} / {nflux}\t" + \
-        #          f"delta flux : {fluxtot_post-fluxtot_pre:7d} / {fluxtot_post}")
+        self.log(1, f"delta nflux: {nnew-nflux:6d} / {nflux}\t" + \
+                 f"delta flux : {fluxtot_post-fluxtot_pre:7d} / {fluxtot_pre}")
 
         return nnew
