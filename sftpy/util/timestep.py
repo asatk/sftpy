@@ -35,6 +35,12 @@ class Timestep():
     def settime(self, t: float):
         self._time = t
 
+    def getdays(self):
+        return self._time / 86400
+
+    def getyears(self):
+        return self._time / 86400 / 365.25
+
     def reset(self):
         self._time = t_init
         self._step = 0
@@ -48,6 +54,9 @@ class Timestep():
 
     def __str__(self):
         return str(self._time)
+
+    # def __add__(self, x):
+    #     return self._time + x
 
     def __mul__(self, x):
         return self._time * x

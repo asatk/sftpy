@@ -137,10 +137,10 @@ def loop():
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL2(loglvl=0)
-    fragment = Fragment(rwalk_frag)
+    collide = COL2(loglvl=1)
+    fragment = Fragment(rwalk_frag, loglvl=1)
     bmr = BMRSchrijver(cycle=cycle, region=bipole, nest=plagenests, dt=dt,
-                       nfluxmax=nfluxmax, loglvl=0)
+                       nfluxmax=nfluxmax, loglvl=1)
 
     # initialize simulation
     phi, theta, flux, nflux = ini.init()
@@ -149,8 +149,10 @@ def loop():
     timed_logger.clock_start("sim", "Simulation begins:")
     for i in range(1, nstep + 1):
 
-        timed_logger.log(loglvl, f"[{i-1}] t = {time/86400/365:.03g} yr")
-        timed_logger.clock_start("iter")
+        elapsed = time.getdays() + dt / 86400
+
+        timed_logger.log(loglvl, f"[{i-1}] t = {elapsed/365.25:.03g} yr ({elapsed} d)")
+        timed_logger.clock_start("iter", f"[{i-1}] START")
 
         if ((nstep - (i - 1)) < nstepsfullres) and bipole.mode_ar:
             correction = correction / ff
@@ -170,16 +172,24 @@ def loop():
         crot.move(phi, nflux)
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
+
         nflux = collide.collide(phi, theta, flux, nflux)
         nflux = fragment.fragment(phi, theta, flux, nflux)
+
+        # TODO make it possible to simulate N cycles by having a list of cycle
+        # TODO objects rather than specific cycles behave specific ways
+        # TODO this way `emerge` can work multiple cycles at once and can
+        # TODO simulate other longer-term cycles
         phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux)
 
-        timed_logger.log(loglvl, f"Signed flux: {np.sum(flux[:nflux])}")
         timed_logger.log(loglvl,
-                   f"spots: {nflux}\t" + \
-                   f"total flux: {np.sum(np.abs(flux[:nflux]))*1e18:.03g} Mx")
+                         "-" * 85)
+        timed_logger.log(loglvl,
+                   f"\ttotal nflux: {nflux:6d}\t\t" + \
+                   f"total flux: {np.sum(np.abs(flux[:nflux]))*1e18:.03g} Mx\t\t" + \
+                   f"net flux: {np.sum(flux[:nflux])} Mx")
 
-        timed_logger.clock_check("iter", f"[{i-1}]")
+        timed_logger.clock_check("iter", f"[{i-1}] END")
         timed_logger.clock_check("sim", "Simulation elapsed time: ")
 
         time.step()

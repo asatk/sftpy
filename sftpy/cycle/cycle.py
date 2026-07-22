@@ -163,7 +163,7 @@ class CYC1(Cycle):
     def cycle(self):
 
         # convert timestep: (s) -> (yr)
-        time = self._timestep.gettime() / 86400 / 365
+        time = self._timestep.getyears()
 
         # calculate source strength and source emergence latitude
         source, latsource = cycle_prescription(time, self._pd, self._ovr, self._peak,
@@ -202,7 +202,7 @@ class CYC2(Cycle):
     def cycle(self):
 
         # convert timestep: (s) -> (yr)
-        time = self._timestep.gettime() / 86400 / 365
+        time = self._timestep.getyears()
 
         # calculate source strength and source emergence latitude
         source, latsource = cycle_prescription(time, self._pd, self._ovr, self._peak,
@@ -274,7 +274,7 @@ class CYC4(Cycle):
     def cycle(self):
 
         # time in years
-        time = self._timestep.gettime() / 86400 / 365
+        time = self._timestep.getyears()
         minima = CYC4.minima
         polarity = self._polarity
 
