@@ -164,7 +164,7 @@ class BMRSchrijver(BMREmerge):
                 continue
 
             # Step 1 --- determine bipole size distribution
-            self.log(1, f"Cycle ({i}) strength: {source[i]:.05f}")
+            # self.log(1, f"Cycle ({i}) strength: {source[i]:.05f}")
             newflux = self._region.sample_flux(source[i])
             ntotal = len(newflux)
 
@@ -182,11 +182,12 @@ class BMRSchrijver(BMREmerge):
                 phi, theta, flux, nflux, newphi, newtheta, newflux)
 
 
+
             # Step 3 --- orientation of bipole axes
             orient = self._region.sample_orientation(
                 newphi, newtheta, newflux, source[i], ntotal)
 
-            self.log(1, f"newflux = {np.sum(2 * newflux)}")
+
 
             # Step 4 --- position concentrations
             aphi, atheta, aflux = self._region.make_concentrations(
@@ -216,8 +217,13 @@ class BMRSchrijver(BMREmerge):
 
             # self.log(0, f"added nspots: {nadd_tot}")
 
+            # self.log(1, f"newflux = {np.sum(2 * newflux)}")
+            # self.log(1, f"aflux = {np.sum(np.abs(aflux))}")
 
-            self.log(1, f"aflux = {np.sum(np.abs(aflux))}")
+            # print(f"{nflux = }, {nadd_tot = }, {nflux + 2 * nadd_tot = }")
+            # print(f"{aphi.shape = }")
+            # print(f"{phi.shape = }")
+            # print(f"{phi[nflux:nflux+2*nadd_tot].shape = }")
 
             phi[nflux:nflux+2*nadd_tot] = aphi
             theta[nflux:nflux+2*nadd_tot] = atheta
@@ -230,7 +236,7 @@ class BMRSchrijver(BMREmerge):
         nflux_post = nflux
         flux_post = np.sum(np.abs(flux[:nflux]))
 
-        self.log(1, f"delta nflux: {nflux_post - nflux_pre:6d} / {nflux_pre}\t" + \
-                 f"delta flux : {flux_post - flux_pre:7d} / {flux_pre}")
+        self.log(1, f"\tdelta nflux: {nflux_post - nflux_pre:+6d} / {nflux_pre:6d}\t" + \
+                 f"delta flux: {flux_post - flux_pre:+7d} / {flux_pre:7d}")
 
         return phi, theta, flux, nflux

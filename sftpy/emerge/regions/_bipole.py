@@ -116,33 +116,35 @@ class BipoleRegion(MagneticRegion):
 
             # rv_ar = powerlaw_rv(ntotal_ar, -self._p, self._minflux / 2 / binflux,
             #                     self._maxflux / 2 / binflux, rng)
-            rv_ar = schrijver_rv(ntotal_ar, self._p, self._minflux / 2 / self._binflux,
-                                  self._maxflux / 2 / self._binflux, rng)
-            flux_ar = np.astype(rv_ar, np.int64)
+            rv_ar = schrijver_rv(ntotal_ar, self._p, self._minflux / 2,
+                                  self._maxflux, rng)
+            flux_ar = np.astype(rv_ar / self._binflux, np.int64)
         else:
             ntotal_ar = 0
             flux_ar = np.zeros(0)
 
         ## [2] Low-flux tail dominated by ephemeral regions
         if self._mode_eph:
-            a = 8 * source ** (1 / 3) * self._turbulent + (1 - self._turbulent)
+            a = 8 * (source ** (1 / 3) * self._turbulent + (1 - self._turbulent))
             ntotal_eph = a * self._ntotalfactor_eph
             frac_eph = ntotal_eph - int(ntotal_eph)
             ntotal_eph = int(ntotal_eph) + (rng.uniform() < frac_eph)
 
+            # TODO check exp of -p + 1 or -p - 1
             # rv_eph = powerlaw_rv(ntotal_eph, -self._p + 1,self._minflux / 2 / binflux,
             #                      self._maxflux / 2 / binflux, rng)
-            rv_eph = schrijver_rv(ntotal_eph, self._p + 1, self._minflux / 2 / self._binflux,
-                               self._maxflux / 2 / self._binflux, rng)
-            flux_eph = np.astype(rv_eph, np.int64)
+            rv_eph = schrijver_rv(ntotal_eph, self._p + 1, self._minflux / 2,
+                               self._maxflux, rng)
+            flux_eph = np.astype(rv_eph / self._binflux, np.int64)
+
         else:
             ntotal_eph = 0
             flux_eph = np.zeros(0)
 
         self.log(1,
+                 f"Cycle Strength = {source:.5f}\t"
                  f"Active = {ntotal_ar}\t" + \
-                 f"Ephemeral = {ntotal_eph}\t" + \
-                 f"All = {ntotal_ar + ntotal_eph}")
+                 f"Ephemeral = {ntotal_eph}\t")
 
         flux = np.r_[flux_ar, flux_eph]
 
@@ -225,29 +227,33 @@ class BipoleRegion(MagneticRegion):
         percon = np.clip(flux / 3., a_min=1, a_max=None).astype(int)
         percon[percon > (15. / self._binflux)] = 15. / self._binflux
 
-        self.log(1, f"percon = {np.sum(percon)}")
+        # self.log(0, f"percon = {np.sum(percon)}")
 
         # bulk = np.clip(flux // percon, a_min=1, a_max=None)
         bulk = np.clip(np.astype(
             flux / percon, np.int64),
             a_min=1, a_max=None)
 
-        self.log(1, f"bulk = {np.mean(bulk)}")
+        # self.log(0, f"bulk = {np.mean(bulk)}")
 
         rest = np.clip(flux - percon * bulk, a_min=0, a_max=None)
 
-        # self.log(1, f"rest = {np.sum(rest)}")
-        self.log(1, f"rest = {np.count_nonzero(rest)}")
+        # self.log(2, f"rest = {np.sum(rest)}")
+        # self.log(0, f"rest = {np.count_nonzero(rest)}")
 
         nadd = bulk + (rest > 0)
         nadd[flux < bulk * percon] = 1
-        ind_rest = np.cumsum(nadd) - 1
+        nadd_tot = np.sum(nadd)
+        ind_rest = np.cumsum(nadd)[rest > 0] - 1
 
         r_nadd = np.repeat(r, nadd)
         sep_nadd = np.repeat(sep, nadd)
         percon_nadd = np.repeat(percon, nadd)
-        percon_nadd[ind_rest] = rest
-        nadd_tot = ind_rest[-1] + 1
+        percon_nadd[ind_rest] = rest[rest > 0]
+
+
+
+        # self.log(1, f"percon total = {2 * np.sum(percon_nadd)}")
 
         # one polarity
         offset1 = rng.uniform(high=r_nadd)
@@ -296,6 +302,8 @@ class BipoleRegion(MagneticRegion):
         # Poisson noise added to each concentration
         scale_nadd = np.sqrt(percon_nadd)
         noise = rng.normal(scale=scale_nadd)
+        # noise = rng.normal(scale=scale_nadd).astype(np.int64)
+        # noise = np.zeros_like(percon_nadd)
 
         # add both polarities of spots
         aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
@@ -305,5 +313,7 @@ class BipoleRegion(MagneticRegion):
         aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[
             ind_rest]
         aflux = np.astype(aflux, np.int64)
+
+        self.log(1, f"\tdelta nflux: {len(aflux):+6d} / {len(flux):6d}\tdelta flux: {np.sum(np.abs(aflux)):+7d} / {np.sum(np.abs(flux)):7d}")
 
         return aphi, atheta, aflux

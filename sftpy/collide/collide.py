@@ -51,7 +51,7 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
     # print(f"elements = {np.stack([phi, theta, flux], axis=1)}")
     # print(f"{order = }")
 
-    # neighbors_nz = flux != 0
+    neighbors_nz = flux != 0
 
     sintheta = np.sin(theta)
     x = sintheta * np.cos(phi)
@@ -85,11 +85,11 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
         # print(f"{neighbors_nz = })")
 
         # flux of concentration must be non-zero
-        if not flux[i]:
-            continue
-
-        # if not neighbors_nz[i]:
+        # if not flux[i]:
         #     continue
+
+        if not neighbors_nz[i]:
+            continue
 
         lo = los[i]
         thetalo = theta[i] - crphi
@@ -188,11 +188,11 @@ def collide2(phi, theta, flux, nflux, skips, crphi, order, seeds):
             # flux_lost += np.sum(np.abs(flux[neighbors])) - np.abs(flux_sum)
 
             flux[neighbors] = 0
-            # neighbors_nz[neighbors] = False
+            neighbors_nz[neighbors] = False
 
             if flux_sum != 0:
                 flux[nbr_coalesce] = flux_sum
-                # neighbors_nz[nbr_coalesce] = True
+                neighbors_nz[nbr_coalesce] = True
 
     # print(f"flux lost: {flux_lost}")
 
@@ -516,13 +516,9 @@ class COL2(Collide):
 
         # nnew = collide_idl(phi, theta, flux, nflux, skips, crphi, order, seeds)
 
-
-
-
-
         fluxtot_post = np.sum(np.abs(flux[:nnew]))
 
-        self.log(1, f"delta nflux: {nnew-nflux:6d} / {nflux}\t" + \
-                 f"delta flux : {fluxtot_post-fluxtot_pre:7d} / {fluxtot_pre}")
+        self.log(1, f"\tdelta nflux: {nnew-nflux:+6d} / {nflux:6d}\t" + \
+                 f"delta flux: {fluxtot_post-fluxtot_pre:7d} / {fluxtot_pre:7d}")
 
         return nnew
