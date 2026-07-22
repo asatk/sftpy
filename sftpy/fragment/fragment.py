@@ -23,6 +23,8 @@ class Fragment(Component):
     itself.
     """
 
+    prefix = "[fragment]"
+
     def __init__(self,
                  rwalk: RandomWalk,
                  dt: float=dt,
@@ -102,7 +104,7 @@ class Fragment(Component):
         flux_child = np.astype(flux_child, np.int64)
 
         # child spots must have non-zero flux
-        has_flux = flux_child > 0
+        has_flux = flux_child != 0
         if not np.any(has_flux):
             return nflux
 
@@ -117,7 +119,7 @@ class Fragment(Component):
         # create new arrays -- specific locs in mem for rwalk to write into
         phi_child = phi[parents].copy()
         theta_child = theta[parents].copy()
-        
+
         # move child fragments over some fragmentation distance
         self._rwalk.move(phi_child, theta_child, flux_child, nchild)
 
@@ -125,6 +127,9 @@ class Fragment(Component):
         phi[nflux:nflux+nchild] = phi_child
         theta[nflux:nflux+nchild] = theta_child
         flux[nflux:nflux+nchild] = flux_child
+
+        self.log(1, f"\tdelta nflux: {nchild:+6d} / {nflux:6d}\tdelta flux: {np.sum(np.abs(flux[:nflux+nchild])) - np.sum(aflux):+7d} / {np.sum(aflux):7d}")
+
         nflux += nchild
 
         return nflux
