@@ -54,6 +54,7 @@ class Fragment(Component):
         self._dt = dt
         # k0 = 0.4e-24 Mx/s from Schrijver+ 97
         self._k0 = 0.4e-6 * binflux * mult * correction
+        self._kdt = self._k0 * dt
 
     def fragment(self,
                  phi: np.ndarray,
@@ -87,9 +88,7 @@ class Fragment(Component):
         # old prob/lifetime had + 0.008 not 0.12
         # see ref Schrijver+ 1997c (SPh)
         # flux-dependent break-up probability of spots
-        prob = ((aflux * np.exp(-aflux * binflux / 120.) + 0.12)
-                * self._k0
-                * self._dt)
+        prob = aflux * self._kdt * (np.exp(-aflux * binflux / 120.) + 0.12)
 
         # bernoulli trial determining which spots will fragment into 2 children
         parents = np.nonzero(rng.uniform(size=nflux) < prob)[0]
@@ -100,8 +99,10 @@ class Fragment(Component):
             return nflux
 
         # fraction of parent's flux to become a new spot
-        flux_child = rng.uniform(high=0.5, size=nparents) * flux[parents]
-        flux_child = np.astype(flux_child, np.int64)
+        flux_child = rng.integers(low=0, high=aflux[parents]//2, endpoint=True)
+        flux_child *= np.sign(flux[parents])
+        # flux_child = rng.uniform(high=0.5, size=nparents) * flux[parents]
+        # flux_child = np.astype(flux_child, np.int64)
 
         # child spots must have non-zero flux
         has_flux = flux_child != 0
