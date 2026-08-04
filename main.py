@@ -118,8 +118,8 @@ def loop():
         rad=rad,
         binflux=binflux,
         mode_ar=True,
-        mode_eph=False,
-        loglvl=1
+        mode_eph=True,
+        loglvl=0
     )
 
     plagenests = PlageNests(
@@ -129,7 +129,7 @@ def loop():
         avefluxd=avefluxd,
         thr=thr,
         nest_lat_lim=nest_lat_lim,
-        loglvl=1,
+        loglvl=0,
     )
 
     decay = Decay()
@@ -137,10 +137,10 @@ def loop():
     mflow = MF2(dt/2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL2(loglvl=1)
-    fragment = Fragment(rwalk_frag, loglvl=1)
+    collide = COL2(loglvl=0)
+    fragment = Fragment(rwalk_frag, loglvl=0)
     bmr = BMRSchrijver(cycle=cycle, region=bipole, nest=plagenests, dt=dt,
-                       nfluxmax=nfluxmax, loglvl=1)
+                       nfluxmax=nfluxmax, loglvl=0)
 
     # initialize simulation
     phi, theta, flux, nflux = ini.init()
@@ -182,8 +182,7 @@ def loop():
         # TODO simulate other longer-term cycles
         phi, theta, flux, nflux = bmr.emerge(phi, theta, flux, nflux)
 
-        timed_logger.log(loglvl,
-                         "-" * 85)
+        # timed_logger.log(loglvl, "-" * 85)
         timed_logger.log(loglvl,
                    f"\ttotal nflux: {nflux:6d}\t\t" + \
                    f"total flux: {np.sum(np.abs(flux[:nflux]))*1e18:.03g} Mx\t\t" + \
