@@ -24,6 +24,7 @@ class PlageNests(Component):
         self._thetabins = thetabins
         self._binflux = binflux
         self._avefluxd = avefluxd
+        self._active_thr = 2.5 * self._avefluxd * 1.47562 / 2 / binflux
         self._thr = thr
         self._nest_lat_lim = nest_lat_lim
 
@@ -87,8 +88,7 @@ class PlageNests(Component):
         # ~40% of activate regions emerge inside existing regions.
         # applied to all regions larger than 2.5 sq deg (factor 2 for 2 pol)
         # 1.4752 is flux to G
-        active_thr = 2.5 * self._avefluxd * 1.47562 / 2 / self._binflux
-        is_active = np.nonzero(newflux >= active_thr)[0]
+        is_active = np.nonzero(newflux >= self._active_thr)[0]
         nactive = len(is_active)
         if nactive > 0:
             # pick nest regions from set of sufficiently large regions

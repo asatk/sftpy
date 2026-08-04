@@ -105,7 +105,9 @@ class BipoleRegion(MagneticRegion):
 
 
     def sample_flux(self, source: float):
+        source_sign = np.sign(source)
         source = np.abs(source)
+
 
         ## [1] High-flux tail dominant for large regions
         if self._mode_ar:
@@ -142,7 +144,7 @@ class BipoleRegion(MagneticRegion):
             flux_eph = np.zeros(0)
 
         self.log(1,
-                 f"Cycle Strength = {source:.5f}\t"
+                 f"Cycle Strength = {source_sign * source:+.5f}\t"
                  f"Active = {ntotal_ar}\t" + \
                  f"Ephemeral = {ntotal_eph}\t")
 
@@ -224,8 +226,9 @@ class BipoleRegion(MagneticRegion):
         sep = np.clip(r, a_min=9000 / self._rad / 2, a_max=None)
         # number of new concentrations that contain 15e18 Mx w/ at least
         # three equal concentrations per polarity
-        percon = np.clip(flux / 3., a_min=1, a_max=None).astype(int)
-        percon[percon > (15. / self._binflux)] = 15. / self._binflux
+        percon = np.clip(flux / 3, a_min=1, a_max=None)
+        percon = np.trunc(percon)
+        percon[flux > (3 * 15 / self._binflux)] = 15 / self._binflux
 
         # self.log(0, f"percon = {np.sum(percon)}")
 
@@ -242,7 +245,13 @@ class BipoleRegion(MagneticRegion):
         # self.log(0, f"rest = {np.count_nonzero(rest)}")
 
         nadd = bulk + (rest > 0)
+
+        # i dont think this is ever possible -- check IDL code
         nadd[flux < bulk * percon] = 1
+        if np.any(flux < bulk * percon):
+            print(flux[flux < bulk * percon])
+            exit()
+
         nadd_tot = np.sum(nadd)
         ind_rest = np.cumsum(nadd)[rest > 0] - 1
 
@@ -305,15 +314,20 @@ class BipoleRegion(MagneticRegion):
         # noise = rng.normal(scale=scale_nadd).astype(np.int64)
         # noise = np.zeros_like(percon_nadd)
 
+        percon_nadd += noise
+        percon_nadd[ind_rest] -= noise[ind_rest]
+        aflux = np.r_[percon_nadd, -percon_nadd].astype(np.int64)
+
+
         # add both polarities of spots
-        aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
+        # aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
 
         # IDL code has remainder concentration w/o noise...
-        aflux[ind_rest] = aflux[ind_rest] - noise[ind_rest]
-        aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[
-            ind_rest]
-        aflux = np.astype(aflux, np.int64)
+        # aflux[ind_rest] = aflux[ind_rest] - noise[ind_rest]
+        # aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[
+        #     ind_rest]
+        # aflux = np.astype(aflux, np.int64)
 
-        self.log(1, f"\tdelta nflux: {len(aflux):+6d} / {len(flux):6d}\tdelta flux: {np.sum(np.abs(aflux)):+7d} / {np.sum(np.abs(flux)):7d}")
+        # self.log(1, f"\tdelta nflux: {len(aflux):+6d} / {len(flux):6d}\tdelta flux: {np.sum(np.abs(aflux)):+7d} / {np.sum(np.abs(flux)):7d}")
 
         return aphi, atheta, aflux
