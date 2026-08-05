@@ -21,8 +21,8 @@ thr = rc["dflow.DF4.thr"]
 cyl_mult = rc["cycle.mult"]
 rad = rc["physics.rad"]
 
-# prot = 14.255984    # deg/day -> 25.25 day/360deg rotation
-prot = 360.0 / 24.47    # deg/day -> 24.47 day/rotation
+prot = 14.255984    # deg/day -> 25.25 day/sidereal rotation
+# prot = 360.0 / 24.47    # deg/day -> 24.47 day/sidereal rotation
 
 class DifferentialFlow(Component, metaclass=abc.ABCMeta):
     """
@@ -119,6 +119,7 @@ class DF2(DifferentialFlow):
              nflux: int):
 
         mdiff = self._dif_mult
+
         # deg / day -> rad / step
         scale = self._dt * np.pi / 180 / 86400
 
@@ -150,6 +151,7 @@ class DF3(DifferentialFlow):
             return
 
         mdiff = self._dif_mult
+
         # deg / day -> rad / step
         scale = self._dt * np.pi / 180 / 86400
 

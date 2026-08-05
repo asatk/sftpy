@@ -14,6 +14,7 @@ class CarringtonRotation(Component):
         super().__init__(loglvl=loglvl)
         self._crot = crot
         self._dt = dt
+        # deg / day -> rad / step
         self._crot_step = crot * dt / 86400 * np.pi / 180
 
 

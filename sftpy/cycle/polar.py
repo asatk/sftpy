@@ -24,8 +24,8 @@ class ConvergePolarCaps(Component):
                  flux: np.ndarray,
                  nflux: int):
 
-        t = self._time.gettime() / 86400 / 365 - self._time.t_init
-        tpdt = t + self._time.dt / 86400 / 365
+        t = self._time.getyears() - self._time.t_init
+        tpdt = t + self._time.dt / 86400 / 365.25
         half_pd = self._t_cycle / 2
         if not (((t % half_pd) > (half_pd / 2)) and
                 ((tpdt % half_pd) < (half_pd / 2))):
