@@ -74,7 +74,9 @@ class Logger:
             self._clock_deltas[c] += delta
 
             if msg is not None:
-                print(f"[> {msg} {delta.total_seconds()} <]")
+                print(f"[> {msg} {delta.total_seconds():.03f} <]")
+
+            return delta
 
         return null_time
 
@@ -100,15 +102,12 @@ class Logger:
 
             delta = self._clock_deltas[c]
 
-            if self._clock_starts[c] >= self._clock_stops[c]:
-                delta += datetime.now() - self._clock_starts[c]
-
             if msg is not None:
                 print(f"[> {msg} {delta.total_seconds():.03f} s <]")
 
+            return delta
+
         return null_time
-
-
 
 class TimedLogger(Logger):
 
