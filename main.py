@@ -160,7 +160,7 @@ def loop():
             bipole.mode_eph = True
 
         # polar converge -- remove half of all concentrations after half cycle
-        # nflux = polarconv.converge(phi, theta, flux, nflux)
+        nflux = polarconv.converge(phi, theta, flux, nflux)
 
         nflux = decay.decay(phi, theta, flux, nflux)
         rwalk.move(phi, theta, flux, nflux)
@@ -173,7 +173,10 @@ def loop():
         pwrap(phi, nflux)
         twrap(phi, theta, nflux)
 
+        # timed_logger.clock_start("col")
         nflux = collide.collide(phi, theta, flux, nflux)
+        # timed_logger.clock_stop("col", "collision: ")
+
         nflux = fragment.fragment(phi, theta, flux, nflux)
 
         # TODO make it possible to simulate N cycles by having a list of cycle
@@ -188,7 +191,7 @@ def loop():
                    f"total flux: {np.sum(np.abs(flux[:nflux]))*1e18:.03g} Mx\t\t" + \
                    f"net flux: {np.sum(flux[:nflux])} Mx")
 
-        timed_logger.clock_check("iter", f"[{i-1}] END")
+        timed_logger.clock_stop("iter", f"[{i-1}] END")
         timed_logger.clock_check("sim", "Simulation elapsed time: ")
 
         time.step()
@@ -204,6 +207,9 @@ def loop():
     # finish
     timed_logger.clock_stop("sim", "Simulation completed in ")
     timed_logger.clock_start("sim", "Simulation finished: ")
+
+    # tdelta_col = timed_logger.clock_delta("col", "Time spent in `col`:")
+    # tdelta_iter = timed_logger.clock_delta("iter", "Time spent in `iter`:")
 
     return saver
 
@@ -224,7 +230,7 @@ if __name__ == "__main__":
         print(f"FATAL: output directory does not exist: {outpath}")
         exit(1)
 
-    outfile = outpath + "/maps.npy"
+    outfile = outpath + "/maps"
 
     saver = loop()
     saver.save(outfile)
