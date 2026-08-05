@@ -45,6 +45,36 @@ def plot_syn(phi: np.ndarray,
 
 
 
+def map_longavg(maps: np.ndarray,
+                dt: float=dt,
+                thetabins: int=thetabins,
+                flux_thresh: int=flux_thresh):
+    # take longitudinally-averaged
+    maps_longavg = np.mean(maps, axis=1)
+    nstep_save = maps.shape[0]
+
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6,3))
+
+    im = ax.imshow(maps_longavg.T, origin='upper', cmap="gray",
+                   vmin=-flux_thresh, vmax=flux_thresh,
+                   extent=(0, nstep_save, 0, thetabins))
+    ax.set_title("Longitudinally-Averaged Absolute Flux")
+    ax.set_xticks([0, nstep_save // 2, nstep_save - 1],
+                  labels=[
+        f"{0:.1f}",
+        f"{nstep_save // 2 * dt / 86400 / 365.25:.1f}",
+        f"{(nstep_save - 1) * dt / 86400 / 365.25:.1f}"])
+    ax.set_xlabel(r"Time (yr)")
+    ax.set_yticks([thetabins - 1, thetabins // 2, 0],
+                  labels=[r"$\pi$", r"$\pi/2$", "0"])
+    ax.set_ylabel(r"Colatitude $\theta$")
+    cb = plt.colorbar(im, shrink=0.3, cmap="gray", label=r"Flux ($10^{18}$ Mx)")
+    fig.tight_layout()
+
+    plt.show()
+
+
+
 def anim_syn(synoptic_all: np.ndarray,
              dt: float=dt,
              phibins: int=phibins,
@@ -113,7 +143,7 @@ def anim_map_with_flux(maps: np.ndarray,
     # Absolute ("Net") Flux plot
     aflux = np.sum(np.abs(maps), axis=(1, 2))
     nframes = maps.shape[0]
-    time = np.arange(nframes) * dt / 86400 / 365
+    time = np.arange(nframes) * dt / 86400 / 365.25
 
     axflux.plot(time, aflux)
     axflux.set_xlabel("Time (yr)")

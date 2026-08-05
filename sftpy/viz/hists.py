@@ -42,7 +42,7 @@ def plot_lat(phi: np.ndarray,
     lat_flux = np.sum(h_flux, axis=0)
 
 
-def plot_aflux(synoptic_all: np.ndarray,
+def plot_aflux(maps: np.ndarray,
                dt: float=dt,
                show: bool=False):
     """
@@ -51,9 +51,9 @@ def plot_aflux(synoptic_all: np.ndarray,
 
     fig, ax = plt.subplots()
 
-    nframe = synoptic_all.shape[0]
-    aflux = np.sum(np.abs(synoptic_all), axis=(1,2))
-    time = np.arange(nframe) * dt / 86400 / 365
+    nframe = maps.shape[0]
+    aflux = np.sum(np.abs(maps), axis=(1, 2))
+    time = np.arange(nframe) * dt / 86400 / 365.25
 
     ax.plot(time, aflux)
     ax.set_xlabel("Time (yr)")
