@@ -98,12 +98,13 @@ class Fragment(Component):
         if nparents == 0:
             return nflux
 
-        # fraction of parent's flux to become a new spot
-        flux_child = rng.integers(low=0, high=aflux[parents]//2, endpoint=True)
-        flux_child *= np.sign(flux[parents])
-        # flux_child = rng.uniform(high=0.5, size=nparents) * flux[parents]
-        # flux_child = np.astype(flux_child, np.int64)
+        self.log(1, f"nparents: {nparents}")
 
+        # fraction of parent's flux to become a new spot
+        aflux_child = rng.integers(low=0, high=aflux[parents], endpoint=False)
+        aflux_child = np.min([aflux_child, aflux[parents] - aflux_child], axis=0)
+        flux_child = np.sign(flux[parents]) * aflux_child
+        
         # child spots must have non-zero flux
         has_flux = flux_child != 0
         if not np.any(has_flux):
@@ -113,6 +114,8 @@ class Fragment(Component):
         parents = parents[has_flux]
         flux_child = flux_child[has_flux]
         nchild = len(parents)
+
+        self.log(1, f"\tnchild: {nchild}")
 
         # subtract child's flux from parent's flux
         flux[parents] -= flux_child
