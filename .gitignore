@@ -1,6 +1,11 @@
 **/__pycache__
+**/.idea
+**/.git
 *.gif
 *.npy
 *.pdf
 *.png
 *.ipynb
+
+**/runs
+**/lmsal-sft-package
