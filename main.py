@@ -97,7 +97,7 @@ def loop():
     pwrap = WrapPhi()
     twrap = WrapTheta()
     crot = CarringtonRotation(dt)
-    polarconv = ConvergePolarCaps(t_cycle, time)
+    polarconv = ConvergePolarCaps(t_cycle, time, max_cycles=1)
     cycle = CYC1(time, mult=cycle_mult)
     rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
     ini = InitTwo(nfluxmax)
@@ -230,13 +230,18 @@ if __name__ == "__main__":
         print(f"FATAL: output directory does not exist: {outpath}")
         exit(1)
 
-    outfile = outpath + "/maps"
+    outfile_maps = outpath + "/maps"
+    outfile_flux = outpath + "/flux"
 
     saver = loop()
-    saver.save(outfile)
-
+    saver.save(outfile_maps)
     maps = saver.maps
-    plot_aflux(maps, show=True)
+
+    plot_aflux(
+        maps,
+        fname=outfile_flux,
+        show=True)
+
     anim_map_with_flux(
         maps,
         flux_thresh=100,

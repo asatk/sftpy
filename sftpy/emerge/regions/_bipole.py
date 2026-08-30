@@ -187,10 +187,11 @@ class BipoleRegion(MagneticRegion):
                      flux: np.ndarray,
                      latsource: float,
                      ntotal: int) -> np.ndarray:
-
+        aflux = np.abs(flux)
         theta = latsource * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
-        width = self._lat_width * (np.exp(-flux * self._binflux / self._lat_fold) + 0.15)
-        theta += rng.normal(scale=width * np.pi / 180, size=ntotal)
+        width = self._lat_width * (np.exp(-aflux * self._binflux / self._lat_fold) + 0.15)
+        # theta += rng.normal(scale=width * np.pi / 180, size=ntotal)
+        theta += rng.normal(size=ntotal) * width * np.pi / 180
         # TODO introduced this myself just to prevent stuff from going oob
         # theta = np.clip(theta, a_min=-np.pi/2, a_max=np.pi/2)
         # latitude -> co-latitude
@@ -205,8 +206,10 @@ class BipoleRegion(MagneticRegion):
                            flux: np.ndarray,
                            source: float,
                            ntotal: int) -> np.ndarray:
-        width = self._joy_width * np.exp(-self._binflux * flux / self._joy_fold) + self._sjzero
-        orient = rng.normal(loc=self._joy, scale=width, size=ntotal) * np.pi / 180
+        aflux = np.abs(flux)
+        width = self._joy_width * np.exp(-self._binflux * aflux / self._joy_fold) + self._sjzero
+        # orient = rng.normal(loc=self._joy, scale=width, size=ntotal) * np.pi / 180
+        orient = (rng.normal(size=ntotal) * width + self._joy) * np.pi / 180
         # flip sign for opposite polarity regions in different hemispheres (Hale's Law)
         hemi = np.sign(np.pi / 2 - theta)
         orient = np.pi * (1 - hemi) / 2 + hemi * orient
@@ -272,7 +275,7 @@ class BipoleRegion(MagneticRegion):
         offset2 = rng.uniform(high=r_nadd)
         angle2 = rng.uniform(high=2 * np.pi, size=nadd_tot)
 
-        x_tmp = np.r_[sep_nadd + offset1 * np.cos(angle1),
+        x_tmp = np.r_[ sep_nadd + offset1 * np.cos(angle1),
                       -sep_nadd + offset2 * np.cos(angle2)]
         y_tmp = np.r_[offset1 * np.sin(angle1),
                       offset2 * np.sin(angle2)]
@@ -308,6 +311,7 @@ class BipoleRegion(MagneticRegion):
         aphi = np.arctan2(y, x) % (2 * np.pi)
         atheta = np.arccos(z / np.sqrt(x ** 2 + y ** 2 + z ** 2))
 
+        # TODO testing noise
         # Poisson noise added to each concentration
         scale_nadd = np.sqrt(percon_nadd)
         noise = rng.normal(scale=scale_nadd)

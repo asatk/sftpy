@@ -12,10 +12,12 @@ class ConvergePolarCaps(Component):
     def __init__(self,
                  t_cycle: float,
                  time: Timestep,
+                 max_cycles: int=-1,
                  loglvl: int=0):
         super().__init__(loglvl=loglvl)
         self._t_cycle = t_cycle
         self._time = time
+        self._max_cycles = max_cycles
         self._ncycles = 0
 
     def converge(self,
@@ -23,6 +25,9 @@ class ConvergePolarCaps(Component):
                  theta: np.ndarray,
                  flux: np.ndarray,
                  nflux: int):
+
+        if self._ncycles >= self._max_cycles and self._max_cycles >= 0:
+            return nflux
 
         t = self._time.getyears() - self._time.t_init
         tpdt = t + self._time.dt / 86400 / 365.25
@@ -39,5 +44,7 @@ class ConvergePolarCaps(Component):
         theta[:nnew] = theta[:nflux][ind]
         # TODO huh? "ensures zero total flux?
         flux[nnew//2] -= netflux
+
+        self._ncycles += 1
 
         return nnew

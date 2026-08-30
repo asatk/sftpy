@@ -43,7 +43,8 @@ class PlageNests(Component):
             range=((0, 2 * np.pi), (-1., 1.)))
 
         # threshold flux to include locations of plages -- binary map
-        synoptic_thr = np.astype(flux_hist > (self._thr / (self._binflux / 1.4752)), np.float64)
+        thr_gauss = self._thr / self._binflux * 1.4752
+        synoptic_thr = np.astype(flux_hist > thr_gauss, np.float64)
 
         # TODO IDL -- compare smooth+dilation ops
         # looks good from debug plots in BMRSchrijver
@@ -53,7 +54,7 @@ class PlageNests(Component):
         synoptic_sm = cv.filter2D(synoptic_thr, -1, kernel / 9)
 
         # dilate to add an extra ring of pixels to plage
-        synoptic_thr2 = np.asarray(synoptic_sm > 5.9 / 9, dtype=np.uint8)
+        synoptic_thr2 = np.asarray(synoptic_sm >= 6 / 9, dtype=np.uint8)
         synoptic_dil = cv.dilate(synoptic_thr2, kernel)
 
         # nesting latitude limit in pixels of a sine latitude grid
@@ -108,8 +109,8 @@ class PlageNests(Component):
                 # fragmentation, and collisions.
 
                 is_plage = self.identify_plages(phi, theta, flux, nflux)
-                is_plage_px = np.nonzero(np.ravel(is_plage))[0]
-                nplage = len(is_plage_px)
+                is_plage_px = np.array(np.nonzero(is_plage))
+                nplage = is_plage_px.shape[1]
 
                 if self._loglvl >= 3:
                     plot_syn(phi, theta, flux, nflux, show=True)
@@ -122,18 +123,17 @@ class PlageNests(Component):
                 if nplage > 0:
                     nreplace = min(nnest, nplage)
                     self.log(3, f"NEST nreplace = {nreplace}")
-                    point = rng.choice(is_plage_px, replace=False, size=nreplace)
-                    point = np.astype(point, np.int64)
-                    lat = point // self._phibins
+                    ind_chosen = rng.choice(nplage, replace=False, size=nreplace)
+                    grid_chosen = is_plage_px[:,ind_chosen]
 
                     # TODO check the  +1 on these
-                    nest_newphi = point - self._phibins * lat
-                    nest_newtheta = np.pi / 2 - np.arcsin(lat / (self._thetabins / 2) - 1)
+                    nest_newphi = grid_chosen[0] / self._phibins * 2 * np.pi
+                    nest_newtheta = np.arccos(grid_chosen[1] * 2 / self._thetabins - 1)
                     newphi[is_nesting[:nreplace]] = nest_newphi
                     newtheta[is_nesting[:nreplace]] = nest_newtheta
 
-                    self.log(3, f"NEST point: {point}")
-                    self.log(3, f"NEST lat: {lat}")
+                    # self.log(3, f"NEST point: {point}")
+                    # self.log(3, f"NEST lat: {lat}")
                     self.log(3, f"NEST newphi: {nest_newphi}")
                     self.log(3, f"NEST newlat: {nest_newtheta}")
 
