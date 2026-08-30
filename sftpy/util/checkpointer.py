@@ -76,15 +76,17 @@ class SpotSaver:
     def __init__(self,
                  frequency: int,
                  timestep: Timestep,
+                 nsteps: int,
                  coord_type: np.dtype=np.float64,
                  count_type: np.dtype=np.int64):
         self._frequency = frequency
         self._timestep = timestep
+        self._nsteps = nsteps
 
         self._phi_record = np.empty(0, dtype=coord_type)
         self._theta_record = np.empty(0, dtype=coord_type)
         self._flux_record = np.empty(0, dtype=count_type)
-        self._nflux_record = np.empty(0, dtype=count_type)
+        self._nflux_record = np.empty(nsteps // frequency + 1, dtype=np.int32)
 
     def checkpoint(self,
                    phi: np.ndarray,
@@ -92,13 +94,14 @@ class SpotSaver:
                    flux: np.ndarray,
                    nflux: int):
         i = self._timestep.getstep()
-        if i % self._frequency != 0:
+        i_save = i % self._frequency
+        if i_save != 0:
             return
 
         self._phi_record = np.append(self._phi_record, phi)
         self._theta_record = np.append(self._phi_record, theta)
         self._flux_record = np.append(self._flux_record, flux)
-        self._nflux_record = np.append(self._flux_record, nflux)
+        self._nflux_record[i_save] = nflux
 
     def save(self, filename: str):
         np.savez_compressed(
