@@ -1,4 +1,3 @@
-from matplotlib import animation as anim
 from matplotlib import pyplot as plt
 import numpy as np
 

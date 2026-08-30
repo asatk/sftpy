@@ -42,44 +42,44 @@ def plot_syn(phi: np.ndarray,
 
     if show:
         plt.show()
-"""
-def plot_syn(phi: np.ndarray,
-             theta: np.ndarray,
-             flux: np.ndarray,
-             nflux: int,
-             phibins: int=360,
-             thetabins: int=180,
-             name: str=None,
-             flux_thresh: int=30,
-             phi_lims: tuple=(0, 2 * np.pi),
-             theta_lims: tuple=(0, np.pi)):
 
-    sinlat = np.cos(theta[:nflux])
-    sinlat_lims = np.cos(theta_lims)[::-1]
-    h, xe, ye = np.histogram2d(
-            phi[:nflux], sinlat, weights=flux[:nflux],
-            bins=(phibins, thetabins), range=(phi_lims, sinlat_lims))
 
-    fig, ax = plt.subplots(figsize=(6,3))
-
-    ind = np.nonzero(h)
-
-    im = ax.imshow(h.T, origin='upper', cmap="bwr", vmin=-flux_thresh,
-                    vmax=flux_thresh, extent=(0, phibins, 0, thetabins))
-    ax.set_title(name)
-    ax.set_xlabel(r"Azimuth $\phi$")
-    ax.set_xlim(*phi_lims)
-    ax.set_xticks([0, phibins//2, phibins-1], labels=[rf"{phi_lims[0]/np.pi:.3f}$\pi$", rf"{np.mean(phi_lims)/np.pi:.3f}$\pi$", rf"{phi_lims[1]/np.pi:.3f}$\pi$"])
-    ax.set_ylabel(r"Colatitude $\theta$")
-    ax.set_ylim(*theta_lims)
-    ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[rf"{theta_lims[1] / np.pi:.3f}$\pi$", rf"{np.mean(theta_lims) / np.pi:.3f}$\pi$", rf"{theta_lims[0] / np.pi:.3f}$\pi$"])
-    cb = plt.colorbar(im, shrink=0.9, cmap="bwr")
-
-    fig.tight_layout()
-
-    # return fig, ax
-    plt.show()
-"""
+# def plot_syn(phi: np.ndarray,
+#              theta: np.ndarray,
+#              flux: np.ndarray,
+#              nflux: int,
+#              phibins: int=360,
+#              thetabins: int=180,
+#              name: str=None,
+#              flux_thresh: int=30,
+#              phi_lims: tuple=(0, 2 * np.pi),
+#              theta_lims: tuple=(0, np.pi)):
+#
+#     sinlat = np.cos(theta[:nflux])
+#     sinlat_lims = np.cos(theta_lims)[::-1]
+#     h, xe, ye = np.histogram2d(
+#             phi[:nflux], sinlat, weights=flux[:nflux],
+#             bins=(phibins, thetabins), range=(phi_lims, sinlat_lims))
+#
+#     fig, ax = plt.subplots(figsize=(6,3))
+#
+#     ind = np.nonzero(h)
+#
+#     im = ax.imshow(h.T, origin='upper', cmap="bwr", vmin=-flux_thresh,
+#                     vmax=flux_thresh, extent=(0, phibins, 0, thetabins))
+#     ax.set_title(name)
+#     ax.set_xlabel(r"Azimuth $\phi$")
+#     ax.set_xlim(*phi_lims)
+#     ax.set_xticks([0, phibins//2, phibins-1], labels=[rf"{phi_lims[0]/np.pi:.3f}$\pi$", rf"{np.mean(phi_lims)/np.pi:.3f}$\pi$", rf"{phi_lims[1]/np.pi:.3f}$\pi$"])
+#     ax.set_ylabel(r"Colatitude $\theta$")
+#     ax.set_ylim(*theta_lims)
+#     ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[rf"{theta_lims[1] / np.pi:.3f}$\pi$", rf"{np.mean(theta_lims) / np.pi:.3f}$\pi$", rf"{theta_lims[0] / np.pi:.3f}$\pi$"])
+#     cb = plt.colorbar(im, shrink=0.9, cmap="bwr")
+#
+#     fig.tight_layout()
+#
+#     # return fig, ax
+#     plt.show()
 
 
 def map_longavg(maps: np.ndarray,
@@ -112,55 +112,55 @@ def map_longavg(maps: np.ndarray,
     plt.show()
 
 
-"""
-def implot(data: np.ndarray, vlim: float=100, title: str=None):
 
-    phibins = data.shape[0]
-    thetabins = data.shape[1]
+# def implot(data: np.ndarray, vlim: float=100, title: str=None):
+#
+#     phibins = data.shape[0]
+#     thetabins = data.shape[1]
+#
+#     data = data.T
+#     fig, ax = plt.subplots()
+#     im = ax.imshow(data, vmin=-vlim, vmax=vlim, cmap="gray")
+#     ax.set_title(title)
+#     cb = plt.colorbar(im, shrink=0.55)
+#     cb.ax.set_title("Flux ($10^{18}$ Mx)", fontsize=10)
+#
+#     ax.set_xlabel(r"Azimuth $\phi$")
+#     ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
+#     ax.set_ylabel(r"Colatitude $\theta$")
+#     ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
+#
+#
+#     fig.tight_layout()
+#     plt.show()
 
-    data = data.T
-    fig, ax = plt.subplots()
-    im = ax.imshow(data, vmin=-vlim, vmax=vlim, cmap="gray")
-    ax.set_title(title)
-    cb = plt.colorbar(im, shrink=0.55)
-    cb.ax.set_title("Flux ($10^{18}$ Mx)", fontsize=10)
-
-    ax.set_xlabel(r"Azimuth $\phi$")
-    ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
-    ax.set_ylabel(r"Colatitude $\theta$")
-    ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
 
 
-    fig.tight_layout()
-    plt.show()
-"""
+# fig, axlist = plt.subplots(nrows=nhist, ncols=1, sharex=True, figsize=(14, 3*nhist))
+#
+# ax1: plt.Axes
+# ax2: plt.Axes
+#
+# bins = 15
+#
+# thetabins = 180
+# xvals = np.cos(np.linspace(np.pi, 0, thetabins+1, endpoint=True))
+#
+# for i in range(nhist):
+#     axi = axlist[i]
+#     histi = histlist_idl[i]
+#     histp = histlist_py[i]
+#     axi.stairs(histi, edges=xvals, label="IDL", alpha=0.7)
+#     axi.stairs(histp, edges=xvals, label="PY", alpha=0.7)
+#     ti = select_hists[i] / 86400 / 365.25 * dt * savestep / cycle_length
+#     axi.set_title(f"Frame {i+1} Longitude-summed Total Flux (cycle phase: {ti:.02f})")
+#     axi.set_xlabel("Latitude")
+#     axi.set_xticks([-1, 0, 1], [r"$\pi$", r"$\pi/2$", r"$0$"])
+#
+# fig.tight_layout()
+# plt.legend(loc=1)
+# plt.show()
 
-"""
-fig, axlist = plt.subplots(nrows=nhist, ncols=1, sharex=True, figsize=(14, 3*nhist))
-
-ax1: plt.Axes
-ax2: plt.Axes
-
-bins = 15
-
-thetabins = 180
-xvals = np.cos(np.linspace(np.pi, 0, thetabins+1, endpoint=True))
-
-for i in range(nhist):
-    axi = axlist[i]
-    histi = histlist_idl[i]
-    histp = histlist_py[i]
-    axi.stairs(histi, edges=xvals, label="IDL", alpha=0.7)
-    axi.stairs(histp, edges=xvals, label="PY", alpha=0.7)
-    ti = select_hists[i] / 86400 / 365.25 * dt * savestep / cycle_length
-    axi.set_title(f"Frame {i+1} Longitude-summed Total Flux (cycle phase: {ti:.02f})")
-    axi.set_xlabel("Latitude")
-    axi.set_xticks([-1, 0, 1], [r"$\pi$", r"$\pi/2$", r"$0$"])
-
-fig.tight_layout()
-plt.legend(loc=1)
-plt.show()
-"""
 
 
 def anim_syn(synoptic_all: np.ndarray,
