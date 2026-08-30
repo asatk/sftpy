@@ -44,6 +44,7 @@ def plot_lat(phi: np.ndarray,
 
 def plot_aflux(maps: np.ndarray,
                dt: float=dt,
+               fname: str=None,
                show: bool=False):
     """
     Plot the total absolute flux of the stellar surface.
@@ -66,4 +67,7 @@ def plot_aflux(maps: np.ndarray,
 
     if show:
         plt.show()
+
+    if fname is not None:
+        fig.savefig(fname=fname)
 
