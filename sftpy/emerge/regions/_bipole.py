@@ -143,19 +143,19 @@ class BipoleRegion(MagneticRegion):
             ntotal_eph = 0
             flux_eph = np.zeros(0)
 
-        self.log(1,
-                 f"Cycle Strength = {source_sign * source:+.5f}\t"
-                 f"Active = {ntotal_ar}\t" + \
-                 f"Ephemeral = {ntotal_eph}\t")
+        # self.log(1,
+        #          f"Cycle Strength = {source_sign * source:+.5f}\t"
+        #          f"Active = {ntotal_ar}\t" + \
+        #          f"Ephemeral = {ntotal_eph}\t")
 
-        flux = np.r_[flux_ar, flux_eph]
+        flux = np.concatenate([flux_ar, flux_eph])
 
         # accelerated time mode -- include only regions larger than 2sq deg
         # or 2 * 1.5e18 & avefluxd = 3 avefluxd units of 10^18 Mx/m^2
         # IDL model behavior includes all and only ephemeral regions if
         # cycle source strength relative to Sun is negative
 
-        # fast forward stuff from old model
+        # fast-forward stuff from old model
         # only emerge active regions
         if self._mode_ar and not self._mode_eph:
             ind_big = np.nonzero(flux > (3 * self._avefluxd / self._binflux))[0]
@@ -178,7 +178,7 @@ class BipoleRegion(MagneticRegion):
     def sample_phi(self,
                    flux: np.ndarray,
                    ntotal: int) -> np.ndarray:
-        phi = rng.uniform(high=2*np.pi, size=ntotal)
+        phi = rng.uniform(high=2 * np.pi, size=ntotal)
         return phi
 
 
@@ -190,12 +190,12 @@ class BipoleRegion(MagneticRegion):
         aflux = np.abs(flux)
         theta = latsource * np.pi / 180 * rng.choice([-1, 1], size=ntotal)
         width = self._lat_width * (np.exp(-aflux * self._binflux / self._lat_fold) + 0.15)
-        # theta += rng.normal(scale=width * np.pi / 180, size=ntotal)
         theta += rng.normal(size=ntotal) * width * np.pi / 180
-        # TODO introduced this myself just to prevent stuff from going oob
-        # theta = np.clip(theta, a_min=-np.pi/2, a_max=np.pi/2)
         # latitude -> co-latitude
+        # TODO resolve this OOB (co-)latitude issue
+        # TODO it has implications for Hale's Law orientation of new spots
         theta = (np.pi / 2 - theta) % np.pi
+        # theta = np.pi / 2 - theta
         return theta
 
 
@@ -208,7 +208,6 @@ class BipoleRegion(MagneticRegion):
                            ntotal: int) -> np.ndarray:
         aflux = np.abs(flux)
         width = self._joy_width * np.exp(-self._binflux * aflux / self._joy_fold) + self._sjzero
-        # orient = rng.normal(loc=self._joy, scale=width, size=ntotal) * np.pi / 180
         orient = (rng.normal(size=ntotal) * width + self._joy) * np.pi / 180
         # flip sign for opposite polarity regions in different hemispheres (Hale's Law)
         hemi = np.sign(np.pi / 2 - theta)
@@ -224,37 +223,25 @@ class BipoleRegion(MagneticRegion):
                             theta: np.ndarray,
                             flux: np.ndarray,
                             orient: np.ndarray):
+
         r = (np.sqrt(flux * self._binflux * 1e18 / self._avefluxd / np.pi) + 7e8) / 7e10
+
         # impose minimum separation of ~0.5 supergranulation of 18Mm
         sep = np.clip(r, a_min=9000 / self._rad / 2, a_max=None)
+
         # number of new concentrations that contain 15e18 Mx w/ at least
         # three equal concentrations per polarity
         percon = np.clip(flux / 3, a_min=1, a_max=None)
         percon = np.trunc(percon)
         percon[flux > (3 * 15 / self._binflux)] = 15 / self._binflux
 
-        # self.log(0, f"percon = {np.sum(percon)}")
-
-        # bulk = np.clip(flux // percon, a_min=1, a_max=None)
         bulk = np.clip(np.astype(
             flux / percon, np.int64),
             a_min=1, a_max=None)
 
-        # self.log(0, f"bulk = {np.mean(bulk)}")
-
         rest = np.clip(flux - percon * bulk, a_min=0, a_max=None)
 
-        # self.log(2, f"rest = {np.sum(rest)}")
-        # self.log(0, f"rest = {np.count_nonzero(rest)}")
-
         nadd = bulk + (rest > 0)
-
-        # i dont think this is ever possible -- check IDL code
-        nadd[flux < bulk * percon] = 1
-        if np.any(flux < bulk * percon):
-            print(flux[flux < bulk * percon])
-            exit()
-
         nadd_tot = np.sum(nadd)
         ind_rest = np.cumsum(nadd)[rest > 0] - 1
 
@@ -262,10 +249,6 @@ class BipoleRegion(MagneticRegion):
         sep_nadd = np.repeat(sep, nadd)
         percon_nadd = np.repeat(percon, nadd)
         percon_nadd[ind_rest] = rest[rest > 0]
-
-
-
-        # self.log(1, f"percon total = {2 * np.sum(percon_nadd)}")
 
         # one polarity
         offset1 = rng.uniform(high=r_nadd)
@@ -275,15 +258,19 @@ class BipoleRegion(MagneticRegion):
         offset2 = rng.uniform(high=r_nadd)
         angle2 = rng.uniform(high=2 * np.pi, size=nadd_tot)
 
-        x_tmp = np.r_[ sep_nadd + offset1 * np.cos(angle1),
-                      -sep_nadd + offset2 * np.cos(angle2)]
-        y_tmp = np.r_[offset1 * np.sin(angle1),
-                      offset2 * np.sin(angle2)]
+        x_tmp = np.concatenate([
+            +sep_nadd + offset1 * np.cos(angle1),
+            -sep_nadd + offset2 * np.cos(angle2)
+        ])
+        y_tmp = np.concatenate([
+            offset1 * np.sin(angle1),
+            offset2 * np.sin(angle2)
+        ])
 
         # orientation of bipolar spot
         # TODO better way to double these?
         orient_nadd_half = np.repeat(orient, nadd)
-        orient_nadd = np.r_[orient_nadd_half, orient_nadd_half]
+        orient_nadd = np.concatenate([orient_nadd_half, orient_nadd_half])
 
         orient_tmp = orient_nadd + np.pi / 2
         coso = np.cos(orient_tmp)
@@ -293,9 +280,9 @@ class BipoleRegion(MagneticRegion):
 
         # location of bipolar active region / concentration
         phi_nadd_half = np.repeat(phi, nadd)
-        phi_nadd = np.r_[phi_nadd_half, phi_nadd_half]
+        phi_nadd = np.concatenate([phi_nadd_half, phi_nadd_half])
         theta_nadd_half = np.repeat(theta, nadd)
-        theta_nadd = np.r_[theta_nadd_half, theta_nadd_half]
+        theta_nadd = np.concatenate([theta_nadd_half, theta_nadd_half])
 
         cosphi = np.cos(phi_nadd)
         sinphi = np.sin(phi_nadd)
@@ -311,26 +298,20 @@ class BipoleRegion(MagneticRegion):
         aphi = np.arctan2(y, x) % (2 * np.pi)
         atheta = np.arccos(z / np.sqrt(x ** 2 + y ** 2 + z ** 2))
 
-        # TODO testing noise
+        # TODO make noise toggle-able?
         # Poisson noise added to each concentration
         scale_nadd = np.sqrt(percon_nadd)
-        noise = rng.normal(scale=scale_nadd)
-        # noise = rng.normal(scale=scale_nadd).astype(np.int64)
-        # noise = np.zeros_like(percon_nadd)
+        noise = rng.normal(size=nadd_tot) * scale_nadd
+        noise[ind_rest] = 0.0
 
         percon_nadd += noise
         percon_nadd[ind_rest] -= noise[ind_rest]
-        aflux = np.r_[percon_nadd, -percon_nadd].astype(np.int64)
-
 
         # add both polarities of spots
-        # aflux = np.r_[percon_nadd + noise, -percon_nadd - noise]
-
-        # IDL code has remainder concentration w/o noise...
-        # aflux[ind_rest] = aflux[ind_rest] - noise[ind_rest]
-        # aflux[ind_rest + nadd_tot] = aflux[ind_rest + nadd_tot] + noise[
-        #     ind_rest]
-        # aflux = np.astype(aflux, np.int64)
+        aflux = np.concatenate([
+            +percon_nadd,
+            -percon_nadd
+        ]).astype(np.int64)
 
         # self.log(1, f"\tdelta nflux: {len(aflux):+6d} / {len(flux):6d}\tdelta flux: {np.sum(np.abs(aflux)):+7d} / {np.sum(np.abs(flux)):7d}")
 

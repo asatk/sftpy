@@ -146,6 +146,8 @@ def loop():
     phi, theta, flux, nflux = ini.init()
     saver.checkpoint(phi, theta, flux, nflux)
 
+    # TODO print all important options and ask user to confirm?
+
     timed_logger.clock_start("sim", "Simulation begins:")
     for i in range(1, nstep + 1):
 
