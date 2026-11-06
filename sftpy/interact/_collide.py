@@ -89,8 +89,6 @@ def collide2(phi: npt.NDArray[np.float64],
         lcrphi = crphi / sintheta[i]
 
         # identify indices of spots within critical angular distance in co-lat
-        lo: int
-        hi: int
         neighbors_theta = np.arange(lo, hi + 1, dtype=np.int64) % nflux
 
         phi_diff = phi[i] - phi[neighbors_theta]
@@ -124,18 +122,12 @@ def collide2(phi: npt.NDArray[np.float64],
     index = np.nonzero(flux)[0]
     nnew = len(index)
 
-    if nnew < nflux:
-        phi[:nnew] = phi[index]
-        theta[:nnew] = theta[index]
-        flux[:nnew] = flux[index]
+    phi[:nnew] = phi[index]
+    theta[:nnew] = theta[index]
+    flux[:nnew] = flux[index]
 
-    phi_r = phi[:nnew]
-    theta_r = theta[:nnew]
-    flux_r = flux[:nnew]
+    return nnew
 
-    l_ret = (phi_r, theta_r, flux_r)
-
-    return l_ret
 
 
 # @nb.jit(cache=True)
@@ -267,11 +259,7 @@ class SchrijverCollide(Actor, Component):
         order = rng.permutation(np.arange(nflux, dtype=np.int64))
         rvs = rng.uniform(size=nflux)
 
-        phi_out, theta_out, flux_out = collide2(phi_in, theta_in, flux_in, nflux, nskip, crphi, order, rvs)
+        nnew = collide2(phi_in, theta_in, flux_in, nflux, nskip, crphi, order, rvs)
 
-        nnew = len(phi_out)
-
-        # unnecessary but keeps the data clean
-        data.clear()
-
-        data.append_sources(phi_out, theta_out, flux_out, nnew)
+        data.clear(n=nnew)
+        # data.append_sources(phi_out, theta_out, flux_out, nnew)

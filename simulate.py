@@ -20,7 +20,7 @@ from sftpy.sim import Actor, Component
 
 
 
-dt: float = 86400.
+dt: float = 1 * 86400.
 
 from sftpy.util import constants as uconsts
 uconsts.SAVE_FREQ = dt
@@ -78,7 +78,7 @@ class LogDiffNFLUX(Logger):
 
 def setup_sim() -> Simulation:
     # TODO this setup will eventually have a graphical counterpart
-    nstep: int = 1000
+    nstep: int = 100
 
     output_dir = "./runs/nov05run01/"
     uconsts.SAVE_FREQ = 1 * dt
@@ -135,7 +135,7 @@ def setup_sim() -> Simulation:
     sequence = [
         LogStep(time, data),
         init_evt,
-        converge_caps_evt,
+        # converge_caps_evt,
         FluxRW(time, data),
         rot,
         time_dr,
