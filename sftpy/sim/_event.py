@@ -68,8 +68,9 @@ class RecurringEvent(ScheduledEvent, metaclass=abc.ABCMeta):
         self._t_delta = t_delta
 
         time = self._time
-        n_triggers = (time.time_schedule()[-1] - self._t_first) / self._t_delta
-        n_triggers = int(np.ceil(n_triggers)) + 1
+        t_final = time.time_schedule()[-1]
+        n_triggers = (t_final - self._t_first) / self._t_delta
+        n_triggers = int(n_triggers) + 1
 
         if n_triggers == 1:
             print("INFO: This event will never recur.")

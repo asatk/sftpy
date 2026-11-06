@@ -46,8 +46,8 @@ class Timeline(Actor):
         # time step for each simulation step
         schedule = np.asarray(dt_list, dtype=np.float64)
 
-        # calculate time in each step
-        timeline = np.cumsum(schedule) + t_init
+        # calculate start time of each step
+        timeline = np.cumsum(schedule) + t_init - schedule[0]
 
         # schedule of step sizes (s)
         self._dt_schedule = schedule

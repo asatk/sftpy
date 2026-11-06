@@ -1,4 +1,3 @@
-import abc
 import numpy as np
 
 from sftpy.activity import SchrijverCycle
@@ -36,16 +35,21 @@ class LogStepEvent(RecurringEvent):
         super().__init__(time, data, t_first=T_START, t_delta=SAVE_FREQ)
         logger = Logger(0, "event")
         self._logger = logger
-        logger.clock_start(0)
+        logger.clock_start("total")
+        logger.clock_start("elapsed")
+        self._last_step = -1
 
 
     def simulate(self):
         step = self._time.step
         time_y = self._time.time("y")
 
-        delta_s = self._logger.clock_stop(0).total_seconds()
-        delta_s_per = delta_s / self._t_delta * dt
+        total_m = self._logger.clock_stop("total").total_seconds() / 60
+        elapsed_s = self._logger.clock_stop("elapsed").total_seconds()
 
+        elapsed_s_per = np.float64(elapsed_s) / (step - self._last_step)
+
+        # format flux string nicely
         flux = self._data.flux
         nflux = self._data.nflux
         flux_total = float(np.sum(np.abs(flux[:nflux])) * BINFLUX)
@@ -55,15 +59,16 @@ class LogStepEvent(RecurringEvent):
             flux_exp = int(np.log10(flux_total))
         flux_dec = flux_total / 10**flux_exp
 
-        print(f"[{step:>5d}] --- COMPUTE: {delta_s:.2f}s ({delta_s_per:.2f}s / step)--- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
+        print(f"[{step:>5d}] --- TOTAL: {total_m:.2f}m --- ELAPSED {elapsed_s_per:.2f}s / step --- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
 
         self._logger.clock_start(0)
+        self._last_step = step
 
 
 
 def setup_sim() -> Simulation:
     # TODO this setup will eventually have a graphical counterpart
-    nstep: int = 8000
+    nstep: int = 101
 
     output_dir = "./runs/nov05run01/"
     # uconsts.SAVE_FREQ = 1 * dt
@@ -140,7 +145,7 @@ def setup_sim() -> Simulation:
         WrapPhi(time, data),
         WrapTheta(time, data),
         save_evt,
-        time,
+        time
     ]
 
     s = Simulation(time, data, sequence)
