@@ -94,11 +94,10 @@ class Fragment(Actor, Component):
 
         # modify data object for fragmented spots that take a random walk
         data_child = self._data_child
-        data_child.clear()
-        data_child.append_sources(phi_child, theta_child, flux_child, nchild)
+        data_child.insert_sources(phi_child, theta_child, flux_child, nchild)
 
         # move child fragments over some fragmentation distance
         self._rwalk.simulate()
 
         # add child fragments to list of all sources
-        self._data.append(data_child)
+        self._data.append_data(data_child)

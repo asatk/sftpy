@@ -57,7 +57,7 @@ class Data:
     def nflux(self, val: int):
         self._nflux = val
 
-    def append(self, data: Data):
+    def append_data(self, data: Data):
         nflux_add = data.nflux
         nflux_new = self._nflux + nflux_add
 
@@ -86,6 +86,41 @@ class Data:
         self._phi[self._nflux:nflux_new] = phi[:nflux_add]
         self._theta[self._nflux:nflux_new] = theta[:nflux_add]
         self._flux[self._nflux:nflux_new] = flux[:nflux_add]
+        self._nflux = nflux_new
+
+    def insert_data(self,
+                    data: Data,
+                    n: int = 0):
+
+        nflux_add = data.nflux
+        nflux_new = n + nflux_add
+
+        if nflux_new >= NFLUXMAX:
+            print("Too many spots emerged this timestep. Simulation aborting.")
+            exit(1)
+
+        self._phi[n:nflux_new] = data.phi[:nflux_add]
+        self._theta[n:nflux_new] = data.theta[:nflux_add]
+        self._flux[n:nflux_new] = data.flux[:nflux_add]
+        self._nflux = nflux_new
+
+    def insert_sources(self,
+                       phi: npt.NDArray[np.float64],
+                       theta: npt.NDArray[np.float64],
+                       flux: npt.NDArray[np.int64],
+                       nflux: int,
+                       n: int = 0):
+
+        nflux_add = nflux
+        nflux_new = n + nflux_add
+
+        if nflux_new >= NFLUXMAX:
+            print("Too many spots emerged this timestep. Simulation aborting.")
+            exit(1)
+
+        self._phi[n:nflux_new] = phi[:nflux_add]
+        self._theta[n:nflux_new] = theta[:nflux_add]
+        self._flux[n:nflux_new] = flux[:nflux_add]
         self._nflux = nflux_new
 
     def clear(self, n: int = 0):

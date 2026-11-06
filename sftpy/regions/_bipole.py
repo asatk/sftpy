@@ -117,10 +117,7 @@ class SchrijverBipole(MagneticRegion):
         # latitude -> co-latitude
         theta = np.fmod(np.pi / 2 - theta, np.pi)
 
-        data_new.phi[:nnew] = phi
-        data_new.theta[:nnew] = theta
-        data_new.flux[:nnew] = flux
-        data_new.nflux = nnew
+        data_new.insert_sources(phi, theta, flux, nnew)
 
         return data_new
 
@@ -239,8 +236,7 @@ class SchrijverBipole(MagneticRegion):
         ]).astype(np.int64)
 
         data_full = self._data_full
-        data_full.clear()
-        data_full.append_sources(aphi, atheta, aflux, 2 * nadd_tot)
+        data_full.insert_sources(aphi, atheta, aflux, 2 * nadd_tot)
 
         return data_full
 
@@ -287,7 +283,7 @@ class SchrijverEphemeral(SchrijverBipole):
             scale = (1.5 * ar_bfield) ** pm1 / -pm1
             range_factor = flux_max ** -pm1 - flux_min ** -pm1
             factor = 2 * scale * range_factor
-            a = 8 * strength_abs ** (1 / 3) * fraction_trb + (1 - fraction_trb)
+            a = 8 * (strength_abs ** (1 / 3) * fraction_trb + (1 - fraction_trb))
 
             nnew = a * factor * dt_func("d")
             frac = nnew - np.trunc(nnew)

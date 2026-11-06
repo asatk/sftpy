@@ -11,30 +11,41 @@ from sftpy.imgproc import ImageProcessor
 from sftpy.initialize import InitTwo
 from sftpy.interact import SchrijverCollide
 from sftpy.rotation import CarringtonRotation, SinPolyDR
-from sftpy.sim import Data, RecurringEvent, Simulation, Timeline
+from sftpy.sim import Data, RecurringEvent, Simulation, Timeline, Logger
 from sftpy.sim.constants import BINFLUX, T_START
 from sftpy.util import ConvergePolarCaps, SaveMap, WrapPhi, WrapTheta
 
 from sftpy.sim import Actor, Component
-
-
-
+from sftpy.util.constants import SAVE_FREQ
 
 dt: float = 1 * 86400.
 
-from sftpy.util import constants as uconsts
-uconsts.SAVE_FREQ = dt
+# from sftpy.util import constants as uconsts
+# uconsts.SAVE_FREQ = dt
+# TODO setting constants in this way doesn't work
+# NEED TO HAVE SEPARATE SIMULATION CONFIGURATION FILE
+# important for saving and analysis of sim data
 
-class Logger(Actor, Component, metaclass=abc.ABCMeta):
+
+# TODO have a useful logger event/actor class for user
+class LogStepEvent(RecurringEvent):
+
     def __init__(self,
                  time: Timeline,
                  data: Data):
-        super().__init__(time, data)
+        super().__init__(time, data, t_first=T_START, t_delta=SAVE_FREQ)
+        logger = Logger(0, "event")
+        self._logger = logger
+        logger.clock_start(0)
 
-class LogStep(Logger):
 
     def simulate(self):
         step = self._time.step
+        time_y = self._time.time("y")
+
+        delta_s = self._logger.clock_stop(0).total_seconds()
+        delta_s_per = delta_s / self._t_delta * dt
+
         flux = self._data.flux
         nflux = self._data.nflux
         flux_total = float(np.sum(np.abs(flux[:nflux])) * BINFLUX)
@@ -43,45 +54,19 @@ class LogStep(Logger):
         else:
             flux_exp = int(np.log10(flux_total))
         flux_dec = flux_total / 10**flux_exp
-        print(f"[{step:>5d}] --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
 
+        print(f"[{step:>5d}] --- COMPUTE: {delta_s:.2f}s ({delta_s_per:.2f}s / step)--- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
 
-class CheckNFLUX(Logger):
-    def __init__(self,
-                 time: Timeline,
-                 data: Data):
-        super().__init__(time, data)
-        self._nflux = data.nflux
-
-    @property
-    def nflux(self):
-        return self._nflux
-
-    def simulate(self) -> None:
-        self._nflux = self._data.nflux
-
-class LogDiffNFLUX(Logger):
-    def __init__(self,
-                 time: Timeline,
-                 data: Data,
-                 checker: CheckNFLUX):
-        super().__init__(time, data)
-        self._checker = checker
-
-    def simulate(self) -> None:
-        nflux_old = self._checker.nflux
-        nflux = self._data.nflux
-        diff = nflux - nflux_old
-        print(f"NFLUX --- {diff:>+6d}")
+        self._logger.clock_start(0)
 
 
 
 def setup_sim() -> Simulation:
     # TODO this setup will eventually have a graphical counterpart
-    nstep: int = 100
+    nstep: int = 8000
 
     output_dir = "./runs/nov05run01/"
-    uconsts.SAVE_FREQ = 1 * dt
+    # uconsts.SAVE_FREQ = 1 * dt
 
     # Primary simulation timeline
     time = Timeline([(nstep, dt)])
@@ -98,8 +83,11 @@ def setup_sim() -> Simulation:
     # Image processing for facilitating large-scale observational effects
     impro = ImageProcessor(time, data)
 
-    # Solar activity cycle
-    activity = SchrijverCycle(time, data)
+    # Solar activity half-cycle
+    cycle1 = SchrijverCycle(time, data)
+
+    # opposite-polarity half-cycle
+    cycle2 = SchrijverCycle(time, data, phase_const=0.5)
 
     # Plage Nesting in Schrijver-style spot emergence
     nest = PlageNests(time, data, impro)
@@ -112,9 +100,14 @@ def setup_sim() -> Simulation:
 
     # Regions emerged by simulation
     regions = [
-        SchrijverBipole(time, data, activity),
-        SchrijverEphemeral(time, data, activity),
+        SchrijverBipole(time, data, cycle1),
+        SchrijverEphemeral(time, data, cycle1),
+        SchrijverBipole(time, data, cycle2),
+        SchrijverEphemeral(time, data, cycle2),
     ]
+
+    # log steps
+    log_step_evt = LogStepEvent(time, data)
 
     # initialization of simulation
     init_evt = InitTwo(time, data)
@@ -125,17 +118,10 @@ def setup_sim() -> Simulation:
     # save simulation results
     save_evt = SaveMap(time, data, output_dir)
 
-
-
-    check_nflux = CheckNFLUX(time, data)
-    log_dnflux = LogDiffNFLUX(time, data, check_nflux)
-
-
-
     sequence = [
-        LogStep(time, data),
+        log_step_evt,
         init_evt,
-        # converge_caps_evt,
+        converge_caps_evt,
         FluxRW(time, data),
         rot,
         time_dr,
@@ -148,15 +134,9 @@ def setup_sim() -> Simulation:
         rot,
         time_dr,
         CarringtonRotation(time, data),
-        # check_nflux,
         SchrijverCollide(time, data),
-        # log_dnflux,
-        # check_nflux,
         Fragment(time, data),
-        # log_dnflux,
-        # check_nflux,
         SchrijverEmerge(time, data, regions, nest),
-        # log_dnflux,
         WrapPhi(time, data),
         WrapTheta(time, data),
         save_evt,
@@ -165,10 +145,10 @@ def setup_sim() -> Simulation:
 
     s = Simulation(time, data, sequence)
 
+    s.register_event(log_step_evt)
     s.register_event(init_evt)
     s.register_event(converge_caps_evt)
     s.register_event(save_evt)
-
 
     return s
 

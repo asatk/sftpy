@@ -49,10 +49,10 @@ class SchrijverEmerge(Actor, Component):
             data_spots = region.fill_new_spots(data_region)
 
             # add flux sources to data for all new spots emerged this step
-            data_new.append(data_spots)
+            data_new.append_data(data_spots)
 
         # add all flux sources emerged this step to data for all sources
-        self._data.append(data_new)
+        self._data.append_data(data_new)
 
 
 
