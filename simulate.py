@@ -59,16 +59,16 @@ class LogStepEvent(RecurringEvent):
             flux_exp = int(np.log10(flux_total))
         flux_dec = flux_total / 10**flux_exp
 
-        print(f"[{step:>5d}] --- TOTAL: {total_m:.2f}m --- ELAPSED {elapsed_s_per:.2f}s / step --- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
+        print(f"[{step:>5d}] --- TOTAL: {total_m:.2f}m --- ELAPSED: {elapsed_s_per:.2f}s / step --- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
 
-        self._logger.clock_start(0)
+        self._logger.clock_start("elapsed")
         self._last_step = step
 
 
 
 def setup_sim() -> Simulation:
     # TODO this setup will eventually have a graphical counterpart
-    nstep: int = 101
+    nstep: int = 8001
 
     output_dir = "./runs/nov05run01/"
     # uconsts.SAVE_FREQ = 1 * dt
@@ -92,7 +92,7 @@ def setup_sim() -> Simulation:
     cycle1 = SchrijverCycle(time, data)
 
     # opposite-polarity half-cycle
-    cycle2 = SchrijverCycle(time, data, phase_const=0.5)
+    cycle2 = SchrijverCycle(time, data, phase_const=0.5, multiplier=-1.0)
 
     # Plage Nesting in Schrijver-style spot emergence
     nest = PlageNests(time, data, impro)
