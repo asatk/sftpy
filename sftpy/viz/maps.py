@@ -2,40 +2,37 @@ from matplotlib import animation as anim
 from matplotlib import pyplot as plt
 import numpy as np
 
-from sftpy import simrc as rc
+from ..imgproc.constants import NPHI, NTHETA
 
-phibins = rc["viz.phibins"]
-thetabins = rc["viz.thetabins"]
-dt = rc["general.dt"] * rc["general.savestep"]
-ms = rc["viz.ms"]
-flux_thresh = rc["viz.maps.thr"]
+ms = 100
+FLUX_THRESHOLD = 100
 
 def plot_syn(phi: np.ndarray,
              theta: np.ndarray,
              flux: np.ndarray,
              nflux: int,
-             phibins: int=phibins,
-             thetabins: int=thetabins,
-             name: str=None,
-             flux_thresh: int=flux_thresh,
-             show: bool=False):
+             nphi: int = NPHI,
+             ntheta: int = NTHETA,
+             name: str | None = None,
+             flux_thresh: int = FLUX_THRESHOLD,
+             show: bool = False):
 
     sinlat = np.cos(theta[:nflux])
     h, xe, ye = np.histogram2d(
             phi[:nflux], sinlat, weights=flux[:nflux],
-            bins=(phibins, thetabins), range=((0, 2*np.pi), (-1, 1)))
+            bins=(nphi, ntheta), range=((0, 2 * np.pi), (-1, 1)))
 
     fig, ax = plt.subplots(figsize=(6,3))
 
     ind = np.nonzero(h)
     
     im = ax.imshow(h.T, origin='upper', cmap="gray", vmin=-flux_thresh,
-                    vmax=flux_thresh, extent=(0, phibins, 0, thetabins))
-    ax.set_title(name)
+                   vmax=flux_thresh, extent=(0, nphi, 0, ntheta))
+    if name is not None: ax.set_title(name)
     ax.set_xlabel(r"Azimuth $\phi$")
-    ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
+    ax.set_xticks([0, nphi // 2, nphi - 1], labels=["0", r"$\pi$", r"$2\pi$"])
     ax.set_ylabel(r"Colatitude $\theta$")
-    ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
+    ax.set_yticks([ntheta - 1, ntheta // 2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
     cb = plt.colorbar(im, shrink=0.9, cmap="gray")
 
     fig.tight_layout()
@@ -83,9 +80,9 @@ def plot_syn(phi: np.ndarray,
 
 
 def map_longavg(maps: np.ndarray,
-                dt: float=dt,
-                thetabins: int=thetabins,
-                flux_thresh: int=flux_thresh):
+                dt: float,
+                thetabins: int = NTHETA,
+                flux_thresh: int = FLUX_THRESHOLD):
     # take longitudinally-averaged
     maps_longavg = np.mean(maps, axis=1)
     nstep_save = maps.shape[0]
@@ -153,7 +150,7 @@ def map_longavg(maps: np.ndarray,
 #     axi.stairs(histi, edges=xvals, label="IDL", alpha=0.7)
 #     axi.stairs(histp, edges=xvals, label="PY", alpha=0.7)
 #     ti = select_hists[i] / 86400 / 365.25 * dt * savestep / cycle_length
-#     axi.set_title(f"Frame {i+1} Longitude-summed Total Flux (cycle phase: {ti:.02f})")
+#     axi.set_title(f"Frame {i+1} Longitude-summed Total Flux (activity phase: {ti:.02f})")
 #     axi.set_xlabel("Latitude")
 #     axi.set_xticks([-1, 0, 1], [r"$\pi$", r"$\pi/2$", r"$0$"])
 #
@@ -164,11 +161,11 @@ def map_longavg(maps: np.ndarray,
 
 
 def anim_syn(synoptic_all: np.ndarray,
-             dt: float=dt,
-             phibins: int=phibins,
-             thetabins: int=thetabins,
-             flux_thresh: int=flux_thresh,
-             ms: int=ms,
+             dt: float,
+             nphi: int = NPHI,
+             ntheta: int = NTHETA,
+             flux_thresh: int = FLUX_THRESHOLD,
+             ms: int = ms,
              show: bool=False):
     """
     Animate the evolution of the flux concentrations on the surface of a star.
@@ -180,11 +177,11 @@ def anim_syn(synoptic_all: np.ndarray,
     smap = np.transpose(synoptic_all, axes=(0,2,1))
 
     im = ax.imshow(smap[0], cmap="gray", vmin=-flux_thresh, vmax=flux_thresh,
-                   extent=(0,phibins,0,thetabins), origin="upper")
+                   extent=(0, nphi, 0, ntheta), origin="upper")
     title = ax.set_title("Frame {0:5d} ({t * dt / 86400:.01f} d)")
-    ax.set_xticks([0, phibins//2, phibins-1], labels=["0", r"$\pi$", r"$2\pi$"])
+    ax.set_xticks([0, nphi // 2, nphi - 1], labels=["0", r"$\pi$", r"$2\pi$"])
     ax.set_xlabel(r"Azimuth $\phi$")
-    ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
+    ax.set_yticks([ntheta - 1, ntheta // 2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"])
     ax.set_ylabel(r"Colatitude $\theta$")
     cb = plt.colorbar(im, shrink=0.9, cmap="gray", label=r"Flux ($10^{18}$ Mx)")
     figa.tight_layout()
@@ -204,10 +201,10 @@ def anim_syn(synoptic_all: np.ndarray,
 
 
 def anim_map_with_flux(maps: np.ndarray,
-                       dt: float=dt,
-                       phibins: int=phibins,
-                       thetabins: int=thetabins,
-                       flux_thresh: int=flux_thresh,
+                       dt: float,
+                       nphi: int=NPHI,
+                       ntheta: int=NTHETA,
+                       flux_thresh: int=FLUX_THRESHOLD,
                        ms: int=ms,
                        fpath: str=".",
                        format: str="gif",
@@ -218,13 +215,13 @@ def anim_map_with_flux(maps: np.ndarray,
     maps = np.transpose(maps, axes=(0, 2, 1))
 
     im = axmap.imshow(maps[0], cmap="gray", vmin=-flux_thresh, vmax=flux_thresh,
-                   extent=(0, phibins, 0, thetabins), origin="upper")
+                      extent=(0, nphi, 0, ntheta), origin="upper")
     axmap.set_title("Carrington Map")
-    axmap.set_xticks([0, phibins // 2, phibins - 1],
-                  labels=["0", r"$\pi$", r"$2\pi$"])
+    axmap.set_xticks([0, nphi // 2, nphi - 1],
+                     labels=["0", r"$\pi$", r"$2\pi$"])
     axmap.set_xlabel(r"Azimuth $\phi$")
-    axmap.set_yticks([thetabins - 1, thetabins // 2, 0],
-                  labels=[r"$\pi$", r"$\pi/2$", "0"])
+    axmap.set_yticks([ntheta - 1, ntheta // 2, 0],
+                     labels=[r"$\pi$", r"$\pi/2$", "0"])
     axmap.set_ylabel(r"Colatitude $\theta$")
     cb = plt.colorbar(im, shrink=0.7, cmap="gray", label=r"Flux ($10^{18}$ Mx)")
 
@@ -236,7 +233,7 @@ def anim_map_with_flux(maps: np.ndarray,
     axflux.plot(time, aflux)
     axflux.set_xlabel("Time (yr)")
     axflux.set_xlim(0, time[-1])
-    axflux.set_ylabel("Flux ($10^{18}$ MX)")
+    axflux.set_ylabel("Flux ($10^{18}$ Mx)")
     axflux.set_ylim(0, None)
     axflux.set_title("Total Absolute Flux")
 

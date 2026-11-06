@@ -1,9 +1,15 @@
 import numpy as np
 from scipy.io import readsav
 
-def sav2npy(infiles: list[str], outfile: str=None,
-            save_map: bool=True, save_spots: bool=False,
-            phibins: int=360, thetabins: int=180):
+from ..imgproc.constants import NPHI, NTHETA
+
+
+def sav2npy(infiles: list[str],
+            outfile: str | None = None,
+            save_map: bool = True,
+            save_spots: bool = False,
+            nphi: int = NPHI,
+            ntheta: int = NTHETA):
 
     if not save_map and not save_spots:
         print("Nothing was saved.")
@@ -16,7 +22,7 @@ def sav2npy(infiles: list[str], outfile: str=None,
 
     if save_map:
         # allocate memory for each saved map
-        maps = np.empty((nsteps_saved, phibins, thetabins), dtype=np.int64)
+        maps = np.empty((nsteps_saved, nphi, ntheta), dtype=np.int64)
         save_dict = {**save_dict,
                      "maps": maps}
 
@@ -43,7 +49,7 @@ def sav2npy(infiles: list[str], outfile: str=None,
             sinlat = np.cos(theta)
             map, _, _ = np.histogram2d(
                 phi, sinlat, weights=flux,
-                bins=(phibins, thetabins),
+                bins=(nphi, ntheta),
                 range=((0, 2 * np.pi), (-1, 1)))
             maps[i] = map
 

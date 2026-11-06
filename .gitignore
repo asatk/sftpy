@@ -7,5 +7,5 @@
 *.png
 *.ipynb
 
-**/runs
+**/runs*
 **/lmsal-sft-package

@@ -7,24 +7,26 @@ Main script that runs the Solar Flux Transport model for Python.
 import numpy as np
 import os
 
+
 from sftpy import simrc as rc
 
-from sftpy.collide import COL2
-from sftpy.cycle import CYC1, ConvergePolarCaps
-from sftpy.decay import Decay
-from sftpy.dflow import DF2
-from sftpy.emerge import BMRSchrijver
-from sftpy.emerge.regions import BipoleRegion, MagneticRegion
+from sftpy.interact import SchrijverCollide
+from sftpy.activity import CYC1, ConvergePolarCaps
+from sftpy.decay import SchrijverDecay
+from sftpy.rotation import DF2
+from sftpy.emerge import BipoleSchrijver
+from regions import SchrijverBipole
 from sftpy.emerge import PlageNests
 from sftpy.fragment import Fragment
 from sftpy.initialize import InitTwo
-from sftpy.mflow import MF2
-from sftpy.misc.carrington import CarringtonRotation
-from sftpy.rwalk import RW0, RW2
+from sftpy.flow import SinTaperMF
+from rotation._carrington import CarringtonRotation
+from sftpy.misc import FastForward
+from sftpy.diffusion import ConstantRW, FluxRW
 
 from sftpy.misc import WrapPhi, WrapTheta
-from sftpy.util import Logger, Timestep, MapSaver
-from sftpy.util.logger import TimedLogger
+from sftpy.util import Timeline, MapSaver
+from _logger import TimedLogger
 from sftpy.viz import plot_aflux, anim_map_with_flux
 
 
@@ -41,8 +43,8 @@ def loop():
 
     fragdist = rc["fragment.fragdist"]
 
-    cycle_mult = rc["cycle.mult"]
-    t_cycle = rc["cycle.period"]
+    cycle_mult = rc["activity.mult"]
+    t_cycle = rc["activity.period"]
 
     phibins = rc["synoptic.phibins"]
     thetabins = rc["synoptic.thetabins"]
@@ -63,16 +65,16 @@ def loop():
     miniflux = rc["schrijver.miniflux"]
     maxflux = rc["schrijver.maxflux"]
 
-    thr = rc["rwalk.thr"]
+    thr = rc["diffusion.thr"]
 
     rad = rc["physics.rad"]
-
-    thetabins = rc["synoptic.thetabins"]
-    phibins = rc["synoptic.phibins"]
 
     nest_lat_lim = 50.0
 
     binflux = rc["physics.binflux"]
+
+    # AD Leo
+    prot = 161.
 
 
     nstepsfullres = nstep - 1
@@ -80,7 +82,7 @@ def loop():
     nstep = nstepslowres + nstepsfullres
 
     # timestep
-    time = Timestep(dt=dt)
+    time = Timeline(dt=dt)
 
     # logger
     timed_logger = TimedLogger(time, savestep, loglvl, "[loop]")
@@ -96,72 +98,76 @@ def loop():
     # define computation components
     pwrap = WrapPhi()
     twrap = WrapTheta()
-    crot = CarringtonRotation(dt)
+    crot = CarringtonRotation(dt, crot=prot)
     polarconv = ConvergePolarCaps(t_cycle, time, max_cycles=1)
     cycle = CYC1(time, mult=cycle_mult)
-    rwalk_frag = RW0(diffusion=fragdist**2/4/dt)
+    rwalk_frag = ConstantRW(diffusion=fragdist ** 2 / 4 / dt)
     ini = InitTwo(nfluxmax)
 
-    bipole = BipoleRegion(
+    bipole = SchrijverBipole(
         p=psource,
-        minflux=miniflux,
-        maxflux=maxflux,
-        avefluxd=avefluxd,
+        flux_min=miniflux,
+        flux_max=maxflux,
+        ar_bfield=avefluxd,
         dt=dt,
-        turbulent=turbulent,
+        fraction_trb=turbulent,
         lat_width=lat_width,
-        lat_fold=lat_fold,
+        lat_flux_fold=lat_fold,
         joy=joy,
-        joy_width=joy_width,
-        joy_fold=joy_fold,
+        tilt_width=joy_width,
+        tilt_flux_fold=joy_fold,
         sjzero=sjzero,
         rad=rad,
         binflux=binflux,
-        mode_ar=True,
-        mode_eph=True,
-        loglvl=0
+        flag_act=True,
+        flag_eph=True,
+        logging=0
     )
 
     plagenests = PlageNests(
-        phibins=phibins,
-        thetabins=thetabins,
+        nphi=phibins,
+        ntheta=thetabins,
         binflux=binflux,
         avefluxd=avefluxd,
         thr=thr,
-        nest_lat_lim=nest_lat_lim,
+        nest_lat_max=nest_lat_lim,
         loglvl=0,
     )
 
-    decay = Decay()
-    rwalk = RW2(dt)
-    mflow = MF2(dt/2)
+    decay = SchrijverDecay()
+    rwalk = FluxRW(dt)
+    mflow = SinTaperMF(dt / 2)
     dflow1 = DF2(dt/4)
     dflow2 = DF2(dt/2)
-    collide = COL2(loglvl=0)
-    fragment = Fragment(rwalk_frag, loglvl=0)
-    bmr = BMRSchrijver(cycle=cycle, region=bipole, nest=plagenests, dt=dt,
-                       nfluxmax=nfluxmax, loglvl=0)
+    collide = SchrijverCollide(logging=0)
+    fragment = Fragment(rwalk_frag, logging=0)
+    bmr = BipoleSchrijver(cycle=cycle, region=bipole, nest=plagenests, dt=dt,
+                          nfluxmax=nfluxmax, loglvl=0)
 
     # initialize simulation
     phi, theta, flux, nflux = ini.init()
     saver.checkpoint(phi, theta, flux, nflux)
+
+    fastforward = FastForward(
+        time,
+        bipole,
+        ff = 1.0,
+        nstepff=nstep - nstepsfullres + 1
+    )
 
     # TODO print all important options and ask user to confirm?
 
     timed_logger.clock_start("sim", "Simulation begins:")
     for i in range(1, nstep + 1):
 
-        elapsed = time.getdays() + dt / 86400
+        elapsed = time.time_d() + dt / 86400
 
         timed_logger.log(loglvl, f"[{i-1}] t = {elapsed/365.25:.03g} yr ({elapsed} d)")
         timed_logger.clock_start("iter", f"[{i-1}] START")
 
-        if ((nstep - (i - 1)) < nstepsfullres) and bipole.mode_ar:
-            correction = correction / ff
-            dt = dt / ff
-            bipole.mode_eph = True
+        fastforward.slowdown()
 
-        # polar converge -- remove half of all concentrations after half cycle
+        # polar converge -- remove half of all concentrations after half activity
         nflux = polarconv.converge(phi, theta, flux, nflux)
 
         nflux = decay.decay(phi, theta, flux, nflux)
@@ -179,9 +185,9 @@ def loop():
         nflux = collide.collide(phi, theta, flux, nflux)
         # timed_logger.clock_stop("col", "collision: ")
 
-        nflux = fragment.fragment(phi, theta, flux, nflux)
+        nflux = fragment.simulate(phi, theta, flux, nflux)
 
-        # TODO make it possible to simulate N cycles by having a list of cycle
+        # TODO make it possible to simulate N cycles by having a list of activity
         # TODO objects rather than specific cycles behave specific ways
         # TODO this way `emerge` can work multiple cycles at once and can
         # TODO simulate other longer-term cycles
@@ -196,7 +202,7 @@ def loop():
         timed_logger.clock_stop("iter", f"[{i-1}] END")
         timed_logger.clock_check("sim", "Simulation elapsed time: ")
 
-        time.step()
+        time.advance()
         saver.checkpoint(phi, theta, flux, nflux)
 
     '''

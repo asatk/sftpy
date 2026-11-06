@@ -1,34 +1,34 @@
 import numpy as np
 
-from sftpy import rng
+from ..sim import Actor, Component, Data, Timeline, rng
+from ..sim.constants import BINFLUX, LOGGING_LEVEL
 
-from ..component import Component
 
-class EmergeGradual(Component):
+# TODO complete
+class EmergeGradual(Actor, Component):
 
     prefix = "[gradual]"
 
     def __init__(self,
-                 dt: float,
-                 binflux: float,
-                 loglvl: int=0):
-        super().__init__(loglvl)
-
-        self._dt = dt
-        self._binflux = binflux
+                 time: Timeline,
+                 data: Data,
+                 logging: int = LOGGING_LEVEL):
+        super().__init__(time, data, logging)
 
         self._laphi = np.zeros(0)
         self._latheta = np.zeros(0)
         self._laflux = np.zeros(0)
         self._latime = np.zeros(0)
 
-    def emerge_gradual(self,
-                       aphi: np.ndarray,
-                       atheta: np.ndarray,
-                       aflux: np.ndarray,
-                       ntotal: int):
+    def simulate(self):
         # TODO vectorize this loop for gradual
         # gradual introduction of active regions
+
+        aphi = self._data.phi
+        aflux = self._data.flux
+        atheta = self._data.theta
+        ntotal = self._data.nflux
+
 
         laphi = self._laphi
         latheta = self._latheta
@@ -38,14 +38,14 @@ class EmergeGradual(Component):
         for j in range(ntotal):
 
             # TODO add gradual emergence param
-            dur = np.asarray(np.sum(np.abs(aflux)) * self._binflux / 0.05 / self._dt,
+            dur = np.asarray(np.sum(np.abs(aflux)) * BINFLUX / 0.05 / self._time.dt(),
                              dtype=np.int64) + 1
 
             if dur > 1 or np.any((latime == 0) & (laflux != 0)):
 
                 self.log(2, f"gradual flux emergence")
 
-                an = len(aflux) / 2
+                an = ntotal / 2
                 ai = rng.integers(high=dur, size=an)
                 laphi = np.r_[laphi, aphi]
                 latheta = np.r_[latheta, atheta]
