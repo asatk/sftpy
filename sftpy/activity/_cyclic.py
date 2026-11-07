@@ -108,7 +108,7 @@ class SchrijverCycle(ScheduledActivity):
             phase = np.fmod(t_years, period) / (period + 2 * overlap)
 
             # source emergence latitude follows empirical equatorward linear trend
-            latitude_timeline = lat_end - (lat_end - lat_start) * 2 * phase
+            latitude_timeline = lat_start - (lat_start - lat_end) * 2 * phase
 
             return latitude_timeline
 
