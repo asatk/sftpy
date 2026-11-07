@@ -59,7 +59,7 @@ class LogStepEvent(RecurringEvent):
             flux_exp = int(np.log10(flux_total))
         flux_dec = flux_total / 10**flux_exp
 
-        print(f"[{step:>5d}] --- TOTAL: {total_m:.2f}m --- ELAPSED: {elapsed_s_per:.2f}s / step --- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
+        print(f"[{step:>6d}] --- TOTAL: {total_m:.2f}m --- ELAPSED: {elapsed_s_per:.2f}s / step --- TIME: {time_y:>.2f} yr --- FLUX: {flux_dec:.2f} 10^{flux_exp + 18} Mx --- NFLUX: {nflux:>6d}")
 
         self._logger.clock_start("elapsed")
         self._last_step = step
@@ -68,9 +68,9 @@ class LogStepEvent(RecurringEvent):
 
 def setup_sim() -> Simulation:
     # TODO this setup will eventually have a graphical counterpart
-    nstep: int = 8001
+    nstep: int = 40001
 
-    output_dir = "./runs/nov05run01/"
+    output_dir = "./runs/nov06test01/"
     # uconsts.SAVE_FREQ = 1 * dt
 
     # Primary simulation timeline
