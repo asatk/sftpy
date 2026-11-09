@@ -70,7 +70,7 @@ def setup_sim() -> Simulation:
     # TODO this setup will eventually have a graphical counterpart
     nstep: int = 40001
 
-    output_dir = "./runs/nov06test01/"
+    output_dir = "./runs/nov07fivecycles/"
     # uconsts.SAVE_FREQ = 1 * dt
 
     # Primary simulation timeline
@@ -80,7 +80,7 @@ def setup_sim() -> Simulation:
     time_dr = Timeline([(1, dt / 4), (1, dt / 2), (1, dt / 4)] * nstep)
 
     # Secondary timeline for fractional timesteps with meridional flow
-    time_mf = Timeline([(2, dt / 2)] * nstep)
+    time_mf = Timeline([(nstep * 2, dt / 2)])
 
     # Simulation data shared amongst all components
     data = Data()

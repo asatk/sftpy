@@ -3,6 +3,7 @@ These components encapsulate the behavior of a stellar activity cycle as
 determined from observations and empirical relationships.
 """
 
+from dataclasses import dataclass
 import numpy as np
 from numpy import typing as npt
 from scipy.interpolate import BSpline, make_smoothing_spline
@@ -18,6 +19,18 @@ from ._activity import ScheduledActivity
 
 
 
+@dataclass(frozen=True)
+class SchrijverCycleConfig:
+    lat_start: float = CYC_LAT_START
+    lat_end: float = CYC_LAT_END
+    period: float = CYC_PERIOD
+    overlap: float = CYC_OVERLAP
+    peak: float = CYC_PEAK
+    phase_const: float = CYC_PHASE_CONST
+    multiplier: float = MULTIPLIER
+
+
+
 class SchrijverCycle(ScheduledActivity):
     """
     Base class for components describing a stellar magnetic activity using
@@ -27,6 +40,7 @@ class SchrijverCycle(ScheduledActivity):
     def __init__(self,
                  time: Timeline,
                  data: Data,
+                 config: SchrijverCycleConfig | None = None,
                  lat_start: float = CYC_LAT_START,
                  lat_end: float = CYC_LAT_END,
                  period: float = CYC_PERIOD,

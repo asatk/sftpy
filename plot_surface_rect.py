@@ -86,7 +86,7 @@ norm = Normalize(vmin=-vlim, vmax=vlim, clip=True)
 # maps = np.load("./runs/aug28five/maps.npz")["maps"]
 
 import glob
-flist = glob.glob("./runs/nov05run01/*.npy")
+flist = glob.glob("./runs/nov07fivecycles/*.npy")
 maps = np.array([np.load(f) for f in sorted(flist)])
 
 iframe = 0
@@ -102,7 +102,7 @@ ax.set_yticks([thetabins-1, thetabins//2, 0], labels=[r"$\pi$", r"$\pi/2$", "0"]
 ax.set_ylabel(r"Colatitude $\theta$")
 title = ax.set_title(f"Magnetic Flux Map (Frame {iframe})")
 text_skip = ax.annotate(f"increment: {inc}", (2, 2), xycoords="figure points",)
-cb = fig.colorbar(im, ax=ax, shrink=0.6, label=r"Flux ($10^{18}$ Mx)")
+cb = fig.colorbar(im, ax=ax, shrink=0.54, label=r"Flux ($10^{18}$ Mx)")
 # ax.scatter(ind[0], ind[1], marker="o", facecolors='none', color="orange")
 
 
@@ -145,6 +145,7 @@ def on_press(event):
 
     elif event.key == "escape":
         text_skip.set_visible(not text_skip.get_visible())
+        title.set_visible(not title.get_visible())
 
     elif event.key == "up":
         vlim += inc
@@ -194,11 +195,15 @@ def on_press(event):
                 poly = Polygon(cont, closed=True)
                 patches_neg.append(poly)
 
-            blob_alpha = 0.5
-            ppos = PatchCollection(patches_pos, color="green", alpha=blob_alpha,
-                                   edgecolor="black")
-            pneg = PatchCollection(patches_neg, color="orange",
-                                   alpha=blob_alpha)
+            # blob_alpha = 0.3
+            # ppos = PatchCollection(patches_pos, color="green", alpha=blob_alpha,
+            #                        edgecolor="black")
+            # pneg = PatchCollection(patches_neg, color="orange",
+            #                        alpha=blob_alpha)
+
+            blob_alpha = 0.3
+            ppos = PatchCollection(patches_pos, edgecolor="lime", linewidths=1, facecolors="none")
+            pneg = PatchCollection(patches_neg, edgecolor="orange", linewidths=1, facecolors="none")
 
             if len(all_contours) >= 100:
                 i_remove = queue_contours.pop(0)

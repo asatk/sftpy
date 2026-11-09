@@ -1,25 +1,31 @@
 import numpy as np
 
 from ..regions import MagneticRegion
-from ..sim import Actor, Component, Data, Timeline
+from ..sim import Actor, Component, Data, rng, Timeline
 
+from .constants import EMERGE_USE_SHOT_NOISE
 from ._nesting import PlageNests
 
 
 
 class SchrijverEmerge(Actor, Component):
     """
-    Component for BMR emergence according to CJS empirical recipes
+    Emerges magnetic regions instantaneously. Has the capability to nest
+    active regions within existing plages. Can also add Poisson noise to
+    each concentration's emerged flux to mimic observations and closely
+    replicate the flux distribution seen for the Sun.
     """
 
     def __init__(self,
                  time: Timeline,
                  data: Data,
                  regions: list[MagneticRegion],
-                 nest: PlageNests|None = None):
+                 nest: PlageNests|None = None,
+                 use_shot_noise: bool = EMERGE_USE_SHOT_NOISE):
         super().__init__(time, data)
         self._regions = regions
         self._nest = nest
+        self._use_shot_noise = use_shot_noise
         self._data_new = Data()
 
     @property
@@ -47,6 +53,15 @@ class SchrijverEmerge(Actor, Component):
 
             # fill in regions with flux point sources
             data_spots = region.fill_new_spots(data_region)
+
+            # add Poisson statistical uncertainty in flux to mimic observations
+            if self._use_shot_noise:
+                nflux = data_spots.nflux
+                flux = data_spots.flux[:nflux]
+                scale_noise = np.sqrt(np.abs(flux))
+                noise = rng.normal(size=nflux) * scale_noise
+                noise = noise.astype(np.int64)
+                flux += noise
 
             # add flux sources to data for all new spots emerged this step
             data_new.append_data(data_spots)

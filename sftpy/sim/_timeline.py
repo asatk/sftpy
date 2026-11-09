@@ -19,6 +19,7 @@ class Timeline(Actor):
                  t_start: float = T_START):
         self._t_start = t_start
         self._step = 0
+        self._step_sizes = step_sizes
         self._schedule_sim(step_sizes, t_start)
         self._schedule_library: list[npt.NDArray] = []
         self._callback_library: dict[Callable, int] = {}
