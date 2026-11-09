@@ -36,7 +36,12 @@ class ScheduledEvent(Event, metaclass=abc.ABCMeta):
 
         # find simulation step immediately at or after event time
         t_diff = self._time.time_schedule() - self._t_event
-        trigger_step = np.argwhere(t_diff >= 0)[0][0]
+        trigger_steps = np.argwhere(t_diff >= 0)
+        if len(trigger_steps) == 0:
+            trigger_step = -1
+            print("INFO: This event will never occur.")
+        else:
+            trigger_step = trigger_steps.ravel()[0]
         self._trigger_step = trigger_step
         self._terminate_step = trigger_step
 
